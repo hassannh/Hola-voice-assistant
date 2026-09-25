@@ -18,7 +18,6 @@ def test_safe_math_blocks_malicious():
     import pytest
 
     with pytest.raises(ValueError):
-        # Attempt code execution
         _safe_eval(ast.parse("__import__('os').system('ls')", mode="eval"))
 
     with pytest.raises(ValueError):
@@ -36,15 +35,31 @@ def test_tool_registry():
         assert "get_current_time_and_date" in names
         assert "calculate" in names
         assert "get_system_status" in names
+        assert "open_application" in names
+        assert "play_music_spotify" in names
+        assert "search_code_and_files" in names
+        assert "read_code_file" in names
+        assert "execute_terminal_command" in names
+        assert "search_developer_web" in names
         assert "save_note" in names
+        # Ensure get_weather is gone
+        assert "get_weather" not in names
 
         # Execute calculate
         res = registry.execute("calculate", {"expression": "25 * 4"})
         assert "100" in res
 
         # Execute note saving and fetching
-        res_save = registry.execute("save_note", {"note": "Call Alice at 5pm"})
-        assert "Call Alice at 5pm" in res_save
+        res_save = registry.execute("save_note", {"note": "Fix audio buffer race condition"})
+        assert "Fix audio buffer race condition" in res_save
 
         res_get = registry.execute("get_notes", {})
-        assert "Call Alice at 5pm" in res_get
+        assert "Fix audio buffer race condition" in res_get
+
+        # Execute code search
+        search_res = registry.execute("search_code_and_files", {"query": "ToolRegistry", "directory": "."})
+        assert "ToolRegistry" in search_res
+
+        # Execute terminal command
+        term_res = registry.execute("execute_terminal_command", {"command": "echo 'Hello Hola'"})
+        assert "Hello Hola" in term_res
