@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Antigravity Voice Assistant · Local & Intelligent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <!-- Background Ambient Glows -->
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="glow glow-3"></div>
+
+    <div class="app-layout">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </div>
+          <div>
+            <div class="brand-badge">Local · Zero Cloud Egress · Autonomous</div>
+            <h1 class="brand-title">AURA AI Assistant</h1>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <div id="ollamaPill" class="status-pill checking" title="Local LLM Server Status">
+            <span class="pill-dot"></span>
+            <span id="ollamaStatusText">Probing Ollama…</span>
+          </div>
+
+          <div id="agentStatePill" class="state-pill idle">
+            <span class="state-dot"></span>
+            <span id="agentStateText">Idle</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Dual-Pane Section -->
+      <main class="main-content">
+        <!-- Left: Conversation Area -->
+        <section class="chat-section">
+          <!-- Voice Visualizer Orb Panel -->
+          <div class="visualizer-card">
+            <div class="orb-container">
+              <div id="voiceOrb" class="voice-orb">
+                <div class="orb-core"></div>
+                <div class="orb-glow"></div>
+                <div class="orb-ripple"></div>
+              </div>
+            </div>
+            <div class="visualizer-meta">
+              <p id="orbStatusMessage" class="orb-message">Press "Start Listening" or type a command</p>
+              <div class="audio-meter-bar">
+                <div id="audioLevelFill" class="meter-fill" style="width: 0%"></div>
+              </div>
+            </div>
+            <div class="visualizer-actions">
+              <button id="toggleVoiceBtn" class="btn btn-primary" id="startBtn">
+                <span class="btn-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                </span>
+                <span id="toggleVoiceText">Start Listening</span>
+              </button>
+              <button id="clearHistoryBtn" class="btn btn-ghost" title="Clear conversation history">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Suggestion Chips -->
+          <div class="chips-row">
+            <span class="chips-label">Quick Prompts:</span>
+            <button class="chip" data-query="What time and date is it?">🕒 Current Time</button>
+            <button class="chip" data-query="Check my system status">💻 System Status</button>
+            <button class="chip" data-query="What is the square root of 256 plus 42?">🧮 Math Calc</button>
+            <button class="chip" data-query="What is the weather in London?">⛅ Weather</button>
+            <button class="chip" data-query="Save a note: review quarterly goals tomorrow">📝 Add Note</button>
+          </div>
+
+          <!-- Chat Messages Container -->
+          <div id="chatHistory" class="chat-history">
+            <div class="welcome-card">
+              <div class="welcome-icon">✨</div>
+              <h3>Ready to assist you locally</h3>
+              <p>Speak naturally via microphone or type in the prompt bar below. All reasoning and speech are performed 100% on your device.</p>
+            </div>
+          </div>
+
+          <!-- Text Prompt Dock -->
+          <div class="prompt-dock">
+            <form id="textChatForm" class="prompt-form">
+              <input
+                id="promptInput"
+                type="text"
+                class="prompt-input"
+                placeholder="Ask or command anything (e.g. 'Calculate 24*15' or 'What time is it?')..."
+                autocomplete="off"
+              />
+              <label class="speak-toggle" title="Read response aloud using TTS">
+                <input id="speakReplyToggle" type="checkbox" checked />
+                <span class="speak-toggle-label">🔊 Speak</span>
+              </label>
+              <button id="sendBtn" type="submit" class="btn-send" title="Send query">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Right: Settings & Capabilities Sidebar -->
+        <aside class="sidebar-section">
+          <!-- Navigation Tabs -->
+          <div class="sidebar-tabs">
+            <button id="tabSettingsBtn" class="tab-btn active" data-tab="settings">Settings</button>
+            <button id="tabToolsBtn" class="tab-btn" data-tab="tools">Capabilities</button>
+            <button id="tabNotesBtn" class="tab-btn" data-tab="notes">Scratchpad</button>
+          </div>
+
+          <!-- Settings Tab Content -->
+          <div id="tabSettings" class="tab-content active">
+            <form id="settingsForm" class="settings-form">
+              <div class="form-group">
+                <label for="input_device">Microphone Device</label>
+                <select id="input_device" name="input_device" class="select-input"></select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="stt_model_size">Whisper Model</label>
+                  <select id="stt_model_size" name="stt_model_size" class="select-input">
+                    <option value="tiny">tiny (fastest)</option>
+                    <option value="base">base</option>
+                    <option value="small">small</option>
+                    <option value="medium">medium</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="llm_model">LLM Model</label>
+                  <input id="llm_model" name="llm_model" class="text-input" placeholder="llama3.2:3b" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="wake_word">Wake Word (Optional)</label>
+                <input id="wake_word" name="wake_word" class="text-input" placeholder="e.g. 'hey assistant' or leave blank" />
+                <span class="field-hint">If set, assistant only triggers when this phrase is heard.</span>
+              </div>
+
+              <div class="form-group switches-group">
+                <label class="switch-row">
+                  <span>Adaptive VAD (Noise-floor calibration)</span>
+                  <input id="adaptive_vad" name="adaptive_vad" type="checkbox" class="toggle-switch" />
+                </label>
+                <label class="switch-row">
+                  <span>Voice Activity Detection (Auto-stop)</span>
+                  <input id="use_vad" name="use_vad" type="checkbox" class="toggle-switch" />
+                </label>
+                <label class="switch-row">
+                  <span>Enable Agent Tools</span>
+                  <input id="enable_tools" name="enable_tools" type="checkbox" class="toggle-switch" />
+                </label>
+                <label class="switch-row">
+                  <span>Low-Latency Token Streaming</span>
+                  <input id="stream_tokens" name="stream_tokens" type="checkbox" class="toggle-switch" />
+                </label>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="tts_rate">Speech Speed (WPM)</label>
+                  <input id="tts_rate" name="tts_rate" type="number" min="80" max="300" class="text-input" />
+                </div>
+                <div class="form-group">
+                  <label for="max_record_seconds">Max Record (s)</label>
+                  <input id="max_record_seconds" name="max_record_seconds" type="number" min="2" max="30" step="0.5" class="text-input" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="system_prompt">Personality / System Instructions</label>
+                <textarea id="system_prompt" name="system_prompt" rows="3" class="textarea-input"></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-save">Save Settings</button>
+            </form>
+          </div>
+
+          <!-- Tools Tab Content -->
+          <div id="tabTools" class="tab-content">
+            <div class="tools-header">
+              <h3>Active Function Tools</h3>
+              <p>The LLM autonomously invokes these tools to inspect system state, calculate math, check weather, or manage notes.</p>
+            </div>
+            <div id="toolsList" class="tools-grid"></div>
+          </div>
+
+          <!-- Notes Tab Content -->
+          <div id="tabNotes" class="tab-content">
+            <div class="notes-header">
+              <h3>Assistant Scratchpad</h3>
+              <p>Persistent notes saved by voice or typed instructions.</p>
+            </div>
+            <div class="new-note-box">
+              <input id="noteInput" type="text" placeholder="Type a quick note..." class="text-input" />
+              <button id="addNoteBtn" class="btn btn-primary btn-sm">Add</button>
+            </div>
+            <div id="notesList" class="notes-list"></div>
+          </div>
+        </aside>
+      </main>
+
+      <!-- Toast Notifications -->
+      <div id="toast" class="toast" hidden></div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
