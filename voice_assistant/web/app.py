@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
@@ -14,7 +15,7 @@ from uvicorn import Config, Server
 
 from voice_assistant.audio import audio_backend_error, list_input_devices
 from voice_assistant.config import Settings
-from voice_assistant.ollama_status import probe_ollama
+from voice_assistant.ollama_status import probe_ollama, stream_pull
 from voice_assistant.runtime import AssistantRuntime
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -130,6 +131,24 @@ def create_app(settings: Settings) -> FastAPI:
     async def clear_history() -> dict:
         await asyncio.to_thread(runtime.clear_history)
         return {"ok": True}
+
+    @app.post("/api/ollama/pull")
+    async def pull_model() -> dict:
+        """Trigger a background pull of the configured model.
+        Progress events are broadcast over WebSocket as type='ollama_pull'.
+        """
+        model = runtime.settings.llm_model
+        host  = runtime.settings.ollama_host
+
+        def _run_pull() -> None:
+            def _progress(event: dict) -> None:
+                hub.publish_threadsafe({"type": "ollama_pull", **event})
+
+            stream_pull(model=model, host=host, on_progress=_progress)
+
+        t = threading.Thread(target=_run_pull, daemon=True, name="ollama-pull")
+        t.start()
+        return {"ok": True, "model": model, "message": f"Pulling {model!r} in background…"}
 
     @app.get("/api/tools")
     async def list_tools() -> dict:

@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hola · Personal AI Assistant for Engineers</title>
+    <meta name="description" content="Hola – a local, private, low-latency voice AI assistant built for engineers. Runs fully offline with Ollama and Whisper." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,288 +14,338 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <!-- Subtle Background Ambient Layer -->
+    <!-- Ambient Background -->
     <div class="ambient-glow glow-top"></div>
     <div class="ambient-glow glow-bottom"></div>
 
-    <div class="app-container">
-      <!-- Top Navigation & System Status -->
-      <header class="app-nav">
-        <div class="nav-left">
-          <div class="app-logo">
-            <span class="logo-symbol">⌘</span>
-          </div>
-          <div class="app-branding">
-            <div class="logo-row">
-              <span class="app-name">Hola</span>
-              <span class="app-badge">DEV STUDIO</span>
+    <div class="app-shell" id="appShell">
+
+      <!-- ═══════════════════════════════════════════
+           COLLAPSIBLE SIDEBAR
+      ════════════════════════════════════════════ -->
+      <aside class="sidebar" id="sidebar" aria-label="Configuration sidebar">
+        <!-- Sidebar Toggle (chevron on edge) -->
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Collapse sidebar" aria-expanded="true" aria-controls="sidebar">
+          <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+
+        <div class="sidebar-inner">
+          <!-- Branding in sidebar -->
+          <div class="sidebar-brand">
+            <div class="brand-logo">
+              <span class="logo-symbol">⌘</span>
             </div>
-            <span class="app-sub">Local · Private · Low-Latency Voice Engine</span>
-          </div>
-        </div>
-
-        <!-- Telemetry Status Pills -->
-        <div class="nav-telemetry">
-          <div id="ollamaPill" class="telemetry-pill checking" title="Local Ollama Inference Daemon">
-            <span class="pill-dot"></span>
-            <span id="ollamaStatusText">Ollama Checking…</span>
+            <div class="brand-text">
+              <span class="brand-name">Hola</span>
+              <span class="brand-badge">DEV STUDIO</span>
+            </div>
           </div>
 
-          <div class="telemetry-pill">
-            <span class="pill-key">MODEL:</span>
-            <span id="activeModelName" class="pill-val">llama3.2:3b</span>
-          </div>
+          <!-- Sidebar Tab Navigation -->
+          <nav class="sidebar-tabs" role="tablist" aria-label="Panel tabs">
+            <button id="tabConfigBtn" class="sidebar-tab-btn active" role="tab" aria-selected="true" aria-controls="panelConfig" data-panel="Config">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>
+              <span>Config</span>
+            </button>
+            <button id="tabModulesBtn" class="sidebar-tab-btn" role="tab" aria-selected="false" aria-controls="panelModules" data-panel="Modules">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="6" rx="1"/><rect x="9" y="3" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="2" y="10" width="6" height="6" rx="1"/><rect x="9" y="10" width="6" height="6" rx="1"/><rect x="16" y="10" width="6" height="6" rx="1"/></svg>
+              <span>Modules</span>
+            </button>
+            <button id="tabNotesBtn" class="sidebar-tab-btn" role="tab" aria-selected="false" aria-controls="panelNotes" data-panel="Notes">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <span>Notes</span>
+            </button>
+          </nav>
 
-          <div id="agentStatePill" class="telemetry-pill state-pill idle">
-            <span class="pill-dot state-dot"></span>
-            <span id="agentStateText">Idle</span>
-          </div>
-        </div>
-      </header>
-
-      <!-- Main Developer Studio Grid -->
-      <main class="studio-grid">
-        <!-- Center Workspace: Audio Deck & Chat Stream -->
-        <section class="workspace-section">
-          <!-- Voice & Real-Time Audio Deck -->
-          <div class="card audio-control-card">
-            <div class="deck-main-row">
-              <!-- Assistant Status & Voice Toggle -->
-              <div class="deck-primary-actions">
-                <button id="toggleVoiceBtn" class="btn btn-primary" title="Toggle autonomous voice loop">
-                  <span class="btn-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                    </svg>
-                  </span>
-                  <span id="toggleVoiceText">Start Assistant</span>
-                </button>
-
-                <!-- Dedicated Mic Test Button -->
-                <button id="testMicBtn" class="btn btn-secondary" title="Test microphone input in browser immediately">
-                  <span class="btn-icon">🎙️</span>
-                  <span id="testMicText">Test Microphone</span>
-                </button>
-
-                <button id="clearHistoryBtn" class="btn btn-ghost" title="Clear conversation history">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                  Clear
-                </button>
+          <!-- Panel: Config -->
+          <div id="panelConfig" class="sidebar-panel active" role="tabpanel" aria-labelledby="tabConfigBtn">
+            <form id="settingsForm" class="settings-form">
+              <div class="form-group">
+                <label for="input_device">Microphone Source</label>
+                <select id="input_device" name="input_device" class="form-control"></select>
               </div>
 
-              <!-- Real-Time Volume & Peak Indicator -->
-              <div class="deck-meter-panel">
-                <div class="meter-info">
-                  <span class="meter-label">INPUT LEVEL</span>
-                  <span id="volDbLabel" class="meter-db">-∞ dB</span>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="stt_model_size">Whisper Model</label>
+                  <select id="stt_model_size" name="stt_model_size" class="form-control">
+                    <option value="tiny">tiny (fastest)</option>
+                    <option value="base">base</option>
+                    <option value="small">small</option>
+                    <option value="medium">medium</option>
+                  </select>
                 </div>
-                <!-- Precision Volume Bar with Segments -->
-                <div class="meter-track">
-                  <div id="meterFill" class="meter-fill" style="width: 0%"></div>
-                  <div id="meterPeak" class="meter-peak" style="left: 0%"></div>
+                <div class="form-group">
+                  <label for="llm_model">Ollama Model</label>
+                  <input id="llm_model" name="llm_model" class="form-control" placeholder="llama3.2:3b" />
                 </div>
               </div>
-            </div>
 
-            <!-- Real-Time Canvas Spectrum Visualizer -->
-            <div class="visualizer-container">
-              <canvas id="waveformCanvas" width="720" height="48"></canvas>
-              <div id="visualizerHint" class="visualizer-hint">
-                <span class="hint-dot"></span>
-                <span id="orbStatusMessage">Ready · Press "Start Assistant" or click "Test Microphone"</span>
+              <div class="form-group">
+                <label for="wake_word">Wake Word</label>
+                <input id="wake_word" name="wake_word" class="form-control" placeholder="e.g. 'hola'" />
+                <span class="hint-text">Trigger word in continuous listening loop</span>
               </div>
-            </div>
-          </div>
 
-          <!-- Quick Action Commands for Developers -->
-          <div class="quick-prompts-bar">
-            <span class="prompts-label">QUICK ACTIONS:</span>
-            <button class="prompt-chip" data-query="Check my system status">
-              <span class="chip-icon">💻</span> System Status
-            </button>
-            <button class="prompt-chip" data-query="What time and date is it?">
-              <span class="chip-icon">🕒</span> Local Time
-            </button>
-            <button class="prompt-chip" data-query="Play Daft Punk on Spotify">
-              <span class="chip-icon">🎵</span> Spotify Music
-            </button>
-            <button class="prompt-chip" data-query="Open Spotify app">
-              <span class="chip-icon">🎧</span> Open Spotify
-            </button>
-            <button class="prompt-chip" data-query="Search code for ToolRegistry">
-              <span class="chip-icon">🔍</span> Search Code
-            </button>
-            <button class="prompt-chip" data-query="Run terminal command git status">
-              <span class="chip-icon">💻</span> Git Status
-            </button>
-            <button class="prompt-chip" data-query="Save a note: review pull request tomorrow morning">
-              <span class="chip-icon">📝</span> Log Note
-            </button>
-          </div>
-
-          <!-- Chat Stream Terminal -->
-          <div class="card chat-terminal">
-            <div class="terminal-bar">
-              <div class="terminal-tabs">
-                <span class="tab-indicator"></span>
-                <span class="terminal-title">CONVERSATION STREAM</span>
-              </div>
-              <div class="terminal-meta">
-                <span id="tokenCounter" class="token-meta">SESSION ACTIVE</span>
-              </div>
-            </div>
-
-            <div id="chatHistory" class="chat-feed">
-              <div class="empty-state">
-                <div class="empty-glyph">⌘</div>
-                <h3>Hola AI is ready</h3>
-                <p>Say "Hola" followed by your command, speak into your microphone, or enter a prompt below.</p>
-              </div>
-            </div>
-
-            <!-- Bottom Prompt Input Dock -->
-            <div class="prompt-dock">
-              <form id="textChatForm" class="prompt-form">
-                <input
-                  id="promptInput"
-                  type="text"
-                  class="prompt-input"
-                  placeholder="Ask Hola or execute a tool (e.g., 'Check CPU & disk', 'Calculate 2^16')..."
-                  autocomplete="off"
-                />
-
-                <label class="speak-switch" title="Vocalize answer with text-to-speech">
-                  <input id="speakReplyToggle" type="checkbox" checked />
-                  <span class="switch-ui"></span>
-                  <span class="switch-label">Speak</span>
+              <div class="switch-stack">
+                <label class="toggle-row">
+                  <span class="toggle-title">Adaptive Noise Floor VAD</span>
+                  <input id="adaptive_vad" name="adaptive_vad" type="checkbox" class="toggle-input" />
+                  <span class="toggle-slider"></span>
                 </label>
+                <label class="toggle-row">
+                  <span class="toggle-title">Silero VAD Silence Cutoff</span>
+                  <input id="use_vad" name="use_vad" type="checkbox" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <label class="toggle-row">
+                  <span class="toggle-title">Autonomous Tool Calling</span>
+                  <input id="enable_tools" name="enable_tools" type="checkbox" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <label class="toggle-row">
+                  <span class="toggle-title">Duplex Token Streaming</span>
+                  <input id="stream_tokens" name="stream_tokens" type="checkbox" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
 
-                <button id="sendBtn" type="submit" class="btn btn-send" title="Send message (Enter)">
-                  <span>Send</span>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="tts_rate">Speech Speed (WPM)</label>
+                  <input id="tts_rate" name="tts_rate" type="number" min="80" max="300" class="form-control" />
+                </div>
+                <div class="form-group">
+                  <label for="max_record_seconds">Max Recording (s)</label>
+                  <input id="max_record_seconds" name="max_record_seconds" type="number" min="2" max="30" step="0.5" class="form-control" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="system_prompt">System Prompt</label>
+                <textarea id="system_prompt" name="system_prompt" rows="3" class="form-control font-mono"></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block">Save Configuration</button>
+            </form>
+          </div>
+
+          <!-- Panel: Modules (paginated) -->
+          <div id="panelModules" class="sidebar-panel" role="tabpanel" aria-labelledby="tabModulesBtn">
+            <div class="panel-header">
+              <h3 class="panel-title">Agent Modules</h3>
+              <p class="panel-sub">Hola can autonomously invoke these functions to interact with your system.</p>
+            </div>
+            <div id="toolsList" class="items-list"></div>
+            <div id="toolsPagination" class="pagination-bar"></div>
+          </div>
+
+          <!-- Panel: Notes (paginated) -->
+          <div id="panelNotes" class="sidebar-panel" role="tabpanel" aria-labelledby="tabNotesBtn">
+            <div class="panel-header">
+              <h3 class="panel-title">Scratchpad</h3>
+              <p class="panel-sub">Notes stored in local SQLite database.</p>
+            </div>
+            <div class="note-add-row">
+              <input id="noteInput" type="text" placeholder="Add a new note…" class="form-control" />
+              <button id="addNoteBtn" class="btn btn-secondary btn-sm">Save</button>
+            </div>
+            <div id="notesList" class="items-list"></div>
+            <div id="notesPagination" class="pagination-bar"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Collapsed sidebar icon strip -->
+      <div class="sidebar-collapsed-strip" id="sidebarCollapsedStrip">
+        <div class="brand-logo-sm">
+          <span>⌘</span>
+        </div>
+        <button class="strip-icon-btn" id="sidebarExpandBtn" title="Expand sidebar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           MAIN CONTENT AREA
+      ════════════════════════════════════════════ -->
+      <div class="main-content" id="mainContent">
+
+        <!-- Top Navigation Bar -->
+        <header class="app-nav" role="banner">
+          <div class="nav-left">
+            <span class="nav-title">Hola AI</span>
+            <span class="nav-sep">·</span>
+            <span class="nav-sub">Local · Private · Low-Latency Voice Engine</span>
+          </div>
+          <div class="nav-telemetry" role="status" aria-live="polite">
+            <div id="ollamaPill" class="telemetry-pill checking" title="Local Ollama Inference Daemon">
+              <span class="pill-dot"></span>
+              <span id="ollamaStatusText">Ollama Checking…</span>
+            </div>
+            <button id="pullModelBtn" class="btn btn-secondary btn-sm pill-action-btn" title="Download configured model from Ollama" hidden>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download Model
+            </button>
+            <div class="telemetry-pill">
+              <span class="pill-key">MODEL:</span>
+              <span id="activeModelName" class="pill-val">llama3.2:3b</span>
+            </div>
+            <div id="agentStatePill" class="telemetry-pill state-pill idle">
+              <span class="pill-dot state-dot"></span>
+              <span id="agentStateText">Idle</span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Ollama Download Progress Banner (hidden by default) -->
+        <div id="ollamaDownloadBanner" class="ollama-download-banner" hidden aria-live="polite" aria-label="Ollama model download progress">
+          <div class="dl-header">
+            <div class="dl-title-row">
+              <span class="dl-icon">⬇</span>
+              <span class="dl-title">Downloading Model</span>
+              <span id="dlModelName" class="dl-model-tag"></span>
+            </div>
+            <div class="dl-actions">
+              <span id="dlSpeed" class="dl-speed"></span>
+              <button id="dlDismissBtn" class="btn btn-ghost btn-sm" title="Dismiss">✕</button>
+            </div>
+          </div>
+          <div class="dl-progress-track">
+            <div id="dlProgressFill" class="dl-progress-fill" style="width:0%"></div>
+          </div>
+          <div class="dl-meta-row">
+            <span id="dlStatusText" class="dl-status">Initializing…</span>
+            <span id="dlPercent" class="dl-percent">0%</span>
+          </div>
+        </div>
+
+        <!-- Audio Control Deck -->
+        <section class="card audio-control-card" aria-label="Audio controls">
+          <div class="deck-main-row">
+            <div class="deck-primary-actions">
+              <button id="toggleVoiceBtn" class="btn btn-primary" title="Toggle autonomous voice loop">
+                <span class="btn-icon">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
                   </svg>
-                </button>
-              </form>
+                </span>
+                <span id="toggleVoiceText">Start Assistant</span>
+              </button>
+              <button id="testMicBtn" class="btn btn-secondary" title="Test microphone input in browser immediately">
+                <span class="btn-icon">🎙️</span>
+                <span id="testMicText">Test Mic</span>
+              </button>
+              <button id="clearHistoryBtn" class="btn btn-ghost" title="Clear conversation history">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Clear
+              </button>
+            </div>
+
+            <!-- Volume Meter Panel -->
+            <div class="deck-meter-panel">
+              <div class="meter-info">
+                <span class="meter-label">INPUT LEVEL</span>
+                <span id="volDbLabel" class="meter-db">-∞ dB</span>
+              </div>
+              <div class="meter-track" role="meter" aria-label="Microphone input level">
+                <div id="meterFill" class="meter-fill" style="width: 0%"></div>
+                <div id="meterPeak" class="meter-peak" style="left: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Waveform Canvas -->
+          <div class="visualizer-container">
+            <canvas id="waveformCanvas" width="960" height="52" aria-label="Audio waveform visualizer"></canvas>
+            <div id="visualizerHint" class="visualizer-hint">
+              <span class="hint-dot"></span>
+              <span id="orbStatusMessage">Ready · Press "Start Assistant" or click "Test Mic"</span>
             </div>
           </div>
         </section>
 
-        <!-- Right Sidebar: Configuration, Modules, and Scratchpad -->
-        <aside class="sidebar-section">
-          <div class="card sidebar-card">
-            <!-- Navigation Tabs -->
-            <div class="sidebar-tabs">
-              <button id="tabSettingsBtn" class="tab-btn active" data-tab="settings">Config</button>
-              <button id="tabToolsBtn" class="tab-btn" data-tab="tools">Modules</button>
-              <button id="tabNotesBtn" class="tab-btn" data-tab="notes">Notes</button>
+        <!-- Quick Action Chips -->
+        <div class="quick-prompts-bar" role="toolbar" aria-label="Quick actions">
+          <span class="prompts-label">QUICK:</span>
+          <button class="prompt-chip" data-query="Check my system status"><span>💻</span> System Status</button>
+          <button class="prompt-chip" data-query="What time and date is it?"><span>🕒</span> Local Time</button>
+          <button class="prompt-chip" data-query="Play Daft Punk on Spotify"><span>🎵</span> Spotify Music</button>
+          <button class="prompt-chip" data-query="Open Spotify app"><span>🎧</span> Open Spotify</button>
+          <button class="prompt-chip" data-query="Search code for ToolRegistry"><span>🔍</span> Search Code</button>
+          <button class="prompt-chip" data-query="Run terminal command git status"><span>💾</span> Git Status</button>
+          <button class="prompt-chip" data-query="Save a note: review pull request tomorrow"><span>📝</span> Log Note</button>
+        </div>
+
+        <!-- Chat Terminal (paginated) -->
+        <section class="card chat-terminal" aria-label="Conversation stream">
+          <div class="terminal-bar">
+            <div class="terminal-tabs">
+              <span class="tab-indicator"></span>
+              <span class="terminal-title">CONVERSATION STREAM</span>
             </div>
-
-            <!-- Settings Tab Content -->
-            <div id="tabSettings" class="tab-content active">
-              <form id="settingsForm" class="settings-form">
-                <div class="form-group">
-                  <label for="input_device">Microphone Source</label>
-                  <select id="input_device" name="input_device" class="form-control"></select>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="stt_model_size">Whisper Model</label>
-                    <select id="stt_model_size" name="stt_model_size" class="form-control">
-                      <option value="tiny">tiny (fastest)</option>
-                      <option value="base">base</option>
-                      <option value="small">small</option>
-                      <option value="medium">medium</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label for="llm_model">Ollama Model</label>
-                    <input id="llm_model" name="llm_model" class="form-control" placeholder="llama3.2:3b" />
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label for="wake_word">Wake Word</label>
-                  <input id="wake_word" name="wake_word" class="form-control" placeholder="e.g. 'hola'" />
-                  <span class="hint-text">Trigger word in continuous listening loop</span>
-                </div>
-
-                <div class="switch-stack">
-                  <label class="toggle-row">
-                    <span class="toggle-title">Adaptive Noise Floor VAD</span>
-                    <input id="adaptive_vad" name="adaptive_vad" type="checkbox" class="toggle-input" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-title">Silero VAD Silence Cutoff</span>
-                    <input id="use_vad" name="use_vad" type="checkbox" class="toggle-input" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-title">Autonomous Tool Calling</span>
-                    <input id="enable_tools" name="enable_tools" type="checkbox" class="toggle-input" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-title">Duplex Token Streaming</span>
-                    <input id="stream_tokens" name="stream_tokens" type="checkbox" class="toggle-input" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="tts_rate">Speech Speed (WPM)</label>
-                    <input id="tts_rate" name="tts_rate" type="number" min="80" max="300" class="form-control" />
-                  </div>
-                  <div class="form-group">
-                    <label for="max_record_seconds">Max Recording (s)</label>
-                    <input id="max_record_seconds" name="max_record_seconds" type="number" min="2" max="30" step="0.5" class="form-control" />
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label for="system_prompt">System Prompt</label>
-                  <textarea id="system_prompt" name="system_prompt" rows="3" class="form-control font-mono"></textarea>
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-block">Save Configuration</button>
-              </form>
-            </div>
-
-            <!-- Tools Tab Content -->
-            <div id="tabTools" class="tab-content">
-              <div class="tab-header">
-                <h3>Autonomous Agent Tools</h3>
-                <p>Hola can autonomously invoke these functions to interact with your system.</p>
-              </div>
-              <div id="toolsList" class="tools-list"></div>
-            </div>
-
-            <!-- Notes Tab Content -->
-            <div id="tabNotes" class="tab-content">
-              <div class="tab-header">
-                <h3>Persistent Scratchpad</h3>
-                <p>Notes stored in local SQLite database (`assistant_history.db`).</p>
-              </div>
-              <div class="note-add-row">
-                <input id="noteInput" type="text" placeholder="Add a new note..." class="form-control" />
-                <button id="addNoteBtn" class="btn btn-secondary">Save</button>
-              </div>
-              <div id="notesList" class="notes-feed"></div>
+            <div class="terminal-meta">
+              <span id="chatPageInfo" class="page-info-label"></span>
+              <span id="tokenCounter" class="token-meta">SESSION ACTIVE</span>
             </div>
           </div>
-        </aside>
-      </main>
 
-      <!-- Toast Feedback -->
-      <div id="toast" class="toast-popup" hidden></div>
-    </div>
+          <div id="chatHistory" class="chat-feed" role="log" aria-live="polite" aria-label="Chat messages">
+            <div class="empty-state">
+              <div class="empty-glyph">⌘</div>
+              <h3>Hola AI is ready</h3>
+              <p>Say "Hola" followed by your command, speak into your microphone, or enter a prompt below.</p>
+            </div>
+          </div>
 
-    <script src="/static/app.js"></script>
+          <!-- Chat Pagination -->
+          <div id="chatPagination" class="chat-pagination-bar"></div>
+
+          <!-- Prompt Dock -->
+          <div class="prompt-dock">
+            <form id="textChatForm" class="prompt-form">
+              <input
+                id="promptInput"
+                type="text"
+                class="prompt-input"
+                placeholder="Ask Hola or execute a tool (e.g., 'Check CPU & disk', 'Calculate 2^16')…"
+                autocomplete="off"
+                aria-label="Message input"
+              />
+              <label class="speak-switch" title="Vocalize answer with text-to-speech">
+                <input id="speakReplyToggle" type="checkbox" checked />
+                <span class="switch-ui"></span>
+                <span class="switch-label">Speak</span>
+              </label>
+              <button id="sendBtn" type="submit" class="btn btn-send" title="Send message (Enter)">
+                <span>Send</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </form>
+          </div>
+        </section>
+
+      </div><!-- /main-content -->
+    </div><!-- /app-shell -->
+
+    <!-- Toast -->
+    <div id="toast" class="toast-popup" hidden role="alert" aria-live="assertive"></div>
+
+    <!-- Modular JS (order matters) -->
+    <script src="/static/js/audio.js"></script>
+    <script src="/static/js/pagination.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/ui.js"></script>
+    <script src="/static/js/ws.js"></script>
+    <script src="/static/js/main.js"></script>
   </body>
 </html>
