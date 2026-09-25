@@ -70,21 +70,21 @@ class Settings:
     port: int = 8765
     max_history_turns: int = 20
     system_prompt: str = (
-        "You are a concise, friendly personal assistant. "
-        "Keep spoken replies short: one or two sentences unless asked for more."
+        "You are Hola, an intelligent, concise personal AI assistant for software engineers. "
+        "Keep spoken replies short, direct, and actionable: one or two sentences unless requested otherwise."
     )
     exit_phrases: tuple[str, ...] = field(
         default_factory=lambda: ("exit", "quit", "stop", "goodbye")
     )
     enable_tools: bool = True
-    wake_word: Optional[str] = None
+    wake_word: Optional[str] = "hola"
     stream_tokens: bool = True
     db_path: str = "assistant_history.db"
 
     @classmethod
     def from_env(cls) -> "Settings":
         load_dotenv()
-        wake = _env("VOICE_WAKE_WORD", "")
+        wake = _env("VOICE_WAKE_WORD", "hola")
         return cls(
             stt_model_size=_env("VOICE_STT_MODEL", "tiny"),
             stt_device=_env("VOICE_STT_DEVICE", "cpu"),

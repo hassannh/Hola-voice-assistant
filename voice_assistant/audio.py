@@ -119,8 +119,8 @@ def _record_until_silence(
             rms = float(np.sqrt(np.mean((data.astype(np.float32) / 32768.0) ** 2)))
 
             if on_level:
-                # Normalized level roughly between 0.0 and 1.0 for visualizer
-                normalized_level = min(1.0, rms * 15.0)
+                # Normalized level between 0.0 and 1.0 for visualizer
+                normalized_level = min(1.0, max(0.0, float(rms * 35.0)))
                 try:
                     on_level(normalized_level)
                 except Exception:

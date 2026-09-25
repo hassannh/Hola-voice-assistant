@@ -3,343 +3,290 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>J.A.R.V.I.S. // Autonomous Holographic AI System</title>
+    <title>Hola · Personal AI Assistant for Engineers</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body class="hud-body">
-    <!-- Cyber Scanlines & Matrix Grid Overlay -->
-    <div class="hud-scanlines"></div>
-    <div class="hud-vignette"></div>
-    <div class="hud-grid-background"></div>
+  <body>
+    <!-- Subtle Background Ambient Layer -->
+    <div class="ambient-glow glow-top"></div>
+    <div class="ambient-glow glow-bottom"></div>
 
-    <!-- Ambient Holographic Glow Flares -->
-    <div class="hud-flare flare-cyan"></div>
-    <div class="hud-flare flare-blue"></div>
-    <div class="hud-flare flare-amber"></div>
-
-    <div class="hud-container">
-      <!-- Top HUD Telemetry Banner -->
-      <header class="hud-header">
-        <div class="hud-header-left">
-          <div class="reactor-mini-badge">
-            <div class="reactor-mini-ring"></div>
-            <div class="reactor-mini-core"></div>
+    <div class="app-container">
+      <!-- Top Navigation & System Status -->
+      <header class="app-nav">
+        <div class="nav-left">
+          <div class="app-logo">
+            <span class="logo-symbol">⌘</span>
           </div>
-          <div class="system-id-block">
-            <div class="hud-sub-label">STARK INDUSTRIES // TACTICAL A.I. PROTOCOL</div>
-            <h1 class="hud-title">J.A.R.V.I.S. <span class="version-tag">MK-85</span></h1>
+          <div class="app-branding">
+            <div class="logo-row">
+              <span class="app-name">Hola</span>
+              <span class="app-badge">DEV STUDIO</span>
+            </div>
+            <span class="app-sub">Local · Private · Low-Latency Voice Engine</span>
           </div>
         </div>
 
-        <!-- Center Diagnostics Ticker -->
-        <div class="hud-ticker">
-          <div class="ticker-item">
-            <span class="ticker-key">NEURAL_CORE:</span>
-            <span id="tickerModel" class="ticker-val">LLAMA-3.2</span>
-          </div>
-          <div class="ticker-divider">//</div>
-          <div class="ticker-item">
-            <span class="ticker-key">VAD_ENGINE:</span>
-            <span class="ticker-val text-cyan">SILERO_ADAPTIVE</span>
-          </div>
-          <div class="ticker-divider">//</div>
-          <div class="ticker-item">
-            <span class="ticker-key">SECURITY:</span>
-            <span class="ticker-val text-emerald">100% LOCAL_ISOLATION</span>
-          </div>
-        </div>
-
-        <!-- Right System Badges -->
-        <div class="hud-header-right">
-          <button id="sfxToggleBtn" class="hud-btn-icon" title="Toggle Stark Interface Audio Effects">
-            <span id="sfxIcon">🔊</span>
-            <span class="sfx-label">SFX</span>
-          </button>
-
-          <div id="ollamaPill" class="hud-pill checking" title="Ollama Daemon Link">
-            <span class="pill-radar"></span>
-            <span id="ollamaStatusText">OLLAMA // LINKING</span>
+        <!-- Telemetry Status Pills -->
+        <div class="nav-telemetry">
+          <div id="ollamaPill" class="telemetry-pill checking" title="Local Ollama Inference Daemon">
+            <span class="pill-dot"></span>
+            <span id="ollamaStatusText">Ollama Checking…</span>
           </div>
 
-          <div id="agentStatePill" class="hud-pill state-pill idle">
-            <span class="pill-pulse"></span>
-            <span id="agentStateText">SYS // STANDBY</span>
+          <div class="telemetry-pill">
+            <span class="pill-key">MODEL:</span>
+            <span id="activeModelName" class="pill-val">llama3.2:3b</span>
+          </div>
+
+          <div id="agentStatePill" class="telemetry-pill state-pill idle">
+            <span class="pill-dot state-dot"></span>
+            <span id="agentStateText">Idle</span>
           </div>
         </div>
       </header>
 
-      <!-- Main Tactical Viewport -->
-      <main class="hud-main-grid">
-        <!-- Left Section: Hologram Arc Reactor & Tactical Feed -->
-        <section class="hud-viewport-section">
-          <!-- Holographic Arc Reactor Display Unit -->
-          <div class="hud-panel reactor-hud-card">
-            <!-- Tech Corner Accents -->
-            <div class="corner-bracket top-left"></div>
-            <div class="corner-bracket top-right"></div>
-            <div class="corner-bracket bottom-left"></div>
-            <div class="corner-bracket bottom-right"></div>
+      <!-- Main Developer Studio Grid -->
+      <main class="studio-grid">
+        <!-- Center Workspace: Audio Deck & Chat Stream -->
+        <section class="workspace-section">
+          <!-- Voice & Real-Time Audio Deck -->
+          <div class="card audio-control-card">
+            <div class="deck-main-row">
+              <!-- Assistant Status & Voice Toggle -->
+              <div class="deck-primary-actions">
+                <button id="toggleVoiceBtn" class="btn btn-primary" title="Toggle autonomous voice loop">
+                  <span class="btn-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                  </span>
+                  <span id="toggleVoiceText">Start Assistant</span>
+                </button>
 
-            <div class="reactor-unit-layout">
-              <!-- Animated Holographic Arc Reactor -->
-              <div class="arc-reactor-wrapper">
-                <div id="arcReactor" class="arc-reactor">
-                  <!-- Outer Counter-Rotating Segment Ring -->
-                  <div class="ring outer-ring"></div>
-                  <!-- Middle Compass / Tachymeter Ring -->
-                  <div class="ring middle-ring"></div>
-                  <!-- Inner Segmented Ring -->
-                  <div class="ring inner-ring"></div>
-                  <!-- Sweeping Radar Scanner Line -->
-                  <div class="radar-sweep"></div>
-                  <!-- Central Glowing Plasma Core -->
-                  <div class="reactor-core">
-                    <div class="core-plasma"></div>
-                    <div class="core-node"></div>
-                  </div>
-                </div>
+                <!-- Dedicated Mic Test Button -->
+                <button id="testMicBtn" class="btn btn-secondary" title="Test microphone input in browser immediately">
+                  <span class="btn-icon">🎙️</span>
+                  <span id="testMicText">Test Microphone</span>
+                </button>
+
+                <button id="clearHistoryBtn" class="btn btn-ghost" title="Clear conversation history">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  Clear
+                </button>
               </div>
 
-              <!-- Reactor Telemetry & Equalizer Waveform -->
-              <div class="reactor-telemetry-col">
-                <div class="telemetry-header">
-                  <div class="telemetry-badge">ACOUSTIC SENSOR ARRAY // ACTIVE</div>
-                  <h2 id="orbStatusMessage" class="telemetry-status">System Standby · Awaiting Voice or Command</h2>
+              <!-- Real-Time Volume & Peak Indicator -->
+              <div class="deck-meter-panel">
+                <div class="meter-info">
+                  <span class="meter-label">INPUT LEVEL</span>
+                  <span id="volDbLabel" class="meter-db">-∞ dB</span>
                 </div>
-
-                <!-- 16-Band Sci-Fi Hologram Audio Equalizer -->
-                <div class="equalizer-container">
-                  <div class="equalizer-bands" id="eqBands">
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                    <span class="eq-bar"></span><span class="eq-bar"></span>
-                  </div>
-                  <div class="equalizer-readout">
-                    <span class="mono-label">INPUT_VOL:</span>
-                    <span id="levelValue" class="mono-data">0.00 dB</span>
-                  </div>
+                <!-- Precision Volume Bar with Segments -->
+                <div class="meter-track">
+                  <div id="meterFill" class="meter-fill" style="width: 0%"></div>
+                  <div id="meterPeak" class="meter-peak" style="left: 0%"></div>
                 </div>
+              </div>
+            </div>
 
-                <!-- Reactor Control Triggers -->
-                <div class="reactor-action-row">
-                  <button id="toggleVoiceBtn" class="hud-btn hud-btn-reactor">
-                    <span class="hud-btn-glow"></span>
-                    <span class="hud-btn-content">
-                      <span class="btn-symbol">⚡</span>
-                      <span id="toggleVoiceText">INITIALIZE AUDIO LINK</span>
-                    </span>
-                  </button>
-
-                  <button id="clearHistoryBtn" class="hud-btn hud-btn-outline" title="Purge Tactical Buffer">
-                    <span>PURGE LOG</span>
-                  </button>
-                </div>
+            <!-- Real-Time Canvas Spectrum Visualizer -->
+            <div class="visualizer-container">
+              <canvas id="waveformCanvas" width="720" height="48"></canvas>
+              <div id="visualizerHint" class="visualizer-hint">
+                <span class="hint-dot"></span>
+                <span id="orbStatusMessage">Ready · Press "Start Assistant" or click "Test Microphone"</span>
               </div>
             </div>
           </div>
 
-          <!-- Tactical Quick Directives (Chips) -->
-          <div class="directive-chips-bar">
-            <span class="directive-header">DIRECTIVES:</span>
-            <button class="hud-chip" data-query="Check my system status">
-              <span class="chip-dot"></span>SYS_DIAGNOSTICS
+          <!-- Quick Action Commands for Developers -->
+          <div class="quick-prompts-bar">
+            <span class="prompts-label">QUICK ACTIONS:</span>
+            <button class="prompt-chip" data-query="Check my system status">
+              <span class="chip-icon">💻</span> System Status
             </button>
-            <button class="hud-chip" data-query="What time and date is it?">
-              <span class="chip-dot"></span>CHRONO_TIME
+            <button class="prompt-chip" data-query="What time and date is it?">
+              <span class="chip-icon">🕒</span> Local Time
             </button>
-            <button class="hud-chip" data-query="What is the square root of 256 plus 42?">
-              <span class="chip-dot"></span>CALCULATE_MATH
+            <button class="prompt-chip" data-query="What is 1024 * 768 / 16?">
+              <span class="chip-icon">⚡</span> Math Eval
             </button>
-            <button class="hud-chip" data-query="What is the weather in London?">
-              <span class="chip-dot"></span>ATMOSPHERE_METRIC
+            <button class="prompt-chip" data-query="Save a note: Run integration benchmarks before release">
+              <span class="chip-icon">📝</span> Log Note
             </button>
-            <button class="hud-chip" data-query="Save a note: Stark armor diagnostic scheduled">
-              <span class="chip-dot"></span>LOG_MEMORANDUM
+            <button class="prompt-chip" data-query="What is the weather in New York?">
+              <span class="chip-icon">⛅</span> Weather
             </button>
           </div>
 
-          <!-- Holographic Chat Stream Terminal -->
-          <div class="hud-panel chat-terminal-panel">
-            <div class="panel-cyber-header">
-              <span class="header-indicator"></span>
-              <span class="header-title">TACTICAL COMMUNICATION FEED // LIVE_LOG</span>
-              <span class="terminal-badge">STREAM_ONLINE</span>
-            </div>
-
-            <div id="chatHistory" class="terminal-stream">
-              <div class="terminal-welcome-card">
-                <div class="welcome-reactor-glyph"></div>
-                <div class="welcome-text-block">
-                  <h3>J.A.R.V.I.S. PROTOCOL INITIALIZED</h3>
-                  <p>All neural processing, speech recognition, and speech synthesis are running securely on local hardware. Say "Hey Assistant", engage microphone telemetry, or enter a directive below.</p>
-                </div>
+          <!-- Chat Stream Terminal -->
+          <div class="card chat-terminal">
+            <div class="terminal-bar">
+              <div class="terminal-tabs">
+                <span class="tab-indicator"></span>
+                <span class="terminal-title">CONVERSATION STREAM</span>
+              </div>
+              <div class="terminal-meta">
+                <span id="tokenCounter" class="token-meta">SESSION ACTIVE</span>
               </div>
             </div>
 
-            <!-- Bottom Tactical Input Dock -->
-            <div class="hud-input-dock">
-              <form id="textChatForm" class="hud-input-form">
-                <div class="input-decor-bracket">[</div>
+            <div id="chatHistory" class="chat-feed">
+              <div class="empty-state">
+                <div class="empty-glyph">⌘</div>
+                <h3>Hola AI is ready</h3>
+                <p>Say "Hola" followed by your command, speak into your microphone, or enter a prompt below.</p>
+              </div>
+            </div>
+
+            <!-- Bottom Prompt Input Dock -->
+            <div class="prompt-dock">
+              <form id="textChatForm" class="prompt-form">
                 <input
                   id="promptInput"
                   type="text"
-                  class="hud-cyber-input"
-                  placeholder="ENTER TACTICAL DIRECTIVE OR QUERY..."
+                  class="prompt-input"
+                  placeholder="Ask Hola or execute a tool (e.g., 'Check CPU & disk', 'Calculate 2^16')..."
                   autocomplete="off"
                 />
-                <div class="input-decor-bracket">]</div>
 
-                <label class="hud-checkbox" title="Audio Vocalization via TTS">
+                <label class="speak-switch" title="Vocalize answer with text-to-speech">
                   <input id="speakReplyToggle" type="checkbox" checked />
-                  <span class="checkbox-box"></span>
-                  <span class="checkbox-text">SPEECH_VOX</span>
+                  <span class="switch-ui"></span>
+                  <span class="switch-label">Speak</span>
                 </label>
 
-                <button id="sendBtn" type="submit" class="hud-btn hud-btn-send" title="Transmit Directive">
-                  <span>TRANSMIT</span>
-                  <span class="transmit-arrow">➔</span>
+                <button id="sendBtn" type="submit" class="btn btn-send" title="Send message (Enter)">
+                  <span>Send</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                  </svg>
                 </button>
               </form>
             </div>
           </div>
         </section>
 
-        <!-- Right Section: Cybernetic Operations & Config Console -->
-        <aside class="hud-sidebar">
-          <div class="hud-panel sidebar-terminal">
-            <!-- Corner Brackets -->
-            <div class="corner-bracket top-left"></div>
-            <div class="corner-bracket top-right"></div>
-            <div class="corner-bracket bottom-left"></div>
-            <div class="corner-bracket bottom-right"></div>
-
-            <!-- Tab Navigation Header -->
-            <div class="sidebar-tab-strip">
-              <button id="tabSettingsBtn" class="hud-tab active" data-tab="settings">
-                <span class="tab-corner"></span>CONFIG
-              </button>
-              <button id="tabToolsBtn" class="hud-tab" data-tab="tools">
-                <span class="tab-corner"></span>MODULES
-              </button>
-              <button id="tabNotesBtn" class="hud-tab" data-tab="notes">
-                <span class="tab-corner"></span>DATA_PAD
-              </button>
+        <!-- Right Sidebar: Configuration, Modules, and Scratchpad -->
+        <aside class="sidebar-section">
+          <div class="card sidebar-card">
+            <!-- Navigation Tabs -->
+            <div class="sidebar-tabs">
+              <button id="tabSettingsBtn" class="tab-btn active" data-tab="settings">Config</button>
+              <button id="tabToolsBtn" class="tab-btn" data-tab="tools">Modules</button>
+              <button id="tabNotesBtn" class="tab-btn" data-tab="notes">Notes</button>
             </div>
 
-            <!-- Tab 1: System Config -->
-            <div id="tabSettings" class="hud-tab-content active">
-              <form id="settingsForm" class="cyber-form">
-                <div class="cyber-field">
-                  <label for="input_device">// AUDIO_IN TRANSDUCER</label>
-                  <select id="input_device" name="input_device" class="cyber-select"></select>
+            <!-- Settings Tab Content -->
+            <div id="tabSettings" class="tab-content active">
+              <form id="settingsForm" class="settings-form">
+                <div class="form-group">
+                  <label for="input_device">Microphone Source</label>
+                  <select id="input_device" name="input_device" class="form-control"></select>
                 </div>
 
-                <div class="cyber-grid-2">
-                  <div class="cyber-field">
-                    <label for="stt_model_size">// WHISPER CORE</label>
-                    <select id="stt_model_size" name="stt_model_size" class="cyber-select">
-                      <option value="tiny">TINY [TURBO]</option>
-                      <option value="base">BASE [BALANCED]</option>
-                      <option value="small">SMALL [ACCURATE]</option>
-                      <option value="medium">MEDIUM [PRECISION]</option>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="stt_model_size">Whisper Model</label>
+                    <select id="stt_model_size" name="stt_model_size" class="form-control">
+                      <option value="tiny">tiny (fastest)</option>
+                      <option value="base">base</option>
+                      <option value="small">small</option>
+                      <option value="medium">medium</option>
                     </select>
                   </div>
-                  <div class="cyber-field">
-                    <label for="llm_model">// NEURAL MODEL</label>
-                    <input id="llm_model" name="llm_model" class="cyber-input" placeholder="llama3.2:3b" />
+                  <div class="form-group">
+                    <label for="llm_model">Ollama Model</label>
+                    <input id="llm_model" name="llm_model" class="form-control" placeholder="llama3.2:3b" />
                   </div>
                 </div>
 
-                <div class="cyber-field">
-                  <label for="wake_word">// WAKE WORD INVOCATION</label>
-                  <input id="wake_word" name="wake_word" class="cyber-input" placeholder="e.g. 'Jarvis' or 'Hey Assistant'" />
-                  <div class="field-tech-hint">Trigger phrase for continuous listening</div>
+                <div class="form-group">
+                  <label for="wake_word">Wake Word</label>
+                  <input id="wake_word" name="wake_word" class="form-control" placeholder="e.g. 'hola'" />
+                  <span class="hint-text">Trigger word in continuous listening loop</span>
                 </div>
 
-                <!-- Cybernetic Switches -->
-                <div class="cyber-switches-matrix">
-                  <label class="matrix-switch">
-                    <span class="switch-title">ADAPTIVE_VAD (ROOM CALIBRATION)</span>
-                    <input id="adaptive_vad" name="adaptive_vad" type="checkbox" />
-                    <span class="switch-slider"></span>
+                <div class="switch-stack">
+                  <label class="toggle-row">
+                    <span class="toggle-title">Adaptive Noise Floor VAD</span>
+                    <input id="adaptive_vad" name="adaptive_vad" type="checkbox" class="toggle-input" />
+                    <span class="toggle-slider"></span>
                   </label>
-                  <label class="matrix-switch">
-                    <span class="switch-title">SILERO_VAD (AUTO_CUTOFF)</span>
-                    <input id="use_vad" name="use_vad" type="checkbox" />
-                    <span class="switch-slider"></span>
+                  <label class="toggle-row">
+                    <span class="toggle-title">Silero VAD Silence Cutoff</span>
+                    <input id="use_vad" name="use_vad" type="checkbox" class="toggle-input" />
+                    <span class="toggle-slider"></span>
                   </label>
-                  <label class="matrix-switch">
-                    <span class="switch-title">AGENT_TOOL_CALLING</span>
-                    <input id="enable_tools" name="enable_tools" type="checkbox" />
-                    <span class="switch-slider"></span>
+                  <label class="toggle-row">
+                    <span class="toggle-title">Autonomous Tool Calling</span>
+                    <input id="enable_tools" name="enable_tools" type="checkbox" class="toggle-input" />
+                    <span class="toggle-slider"></span>
                   </label>
-                  <label class="matrix-switch">
-                    <span class="switch-title">REALTIME_STREAM_DUPLEX</span>
-                    <input id="stream_tokens" name="stream_tokens" type="checkbox" />
-                    <span class="switch-slider"></span>
+                  <label class="toggle-row">
+                    <span class="toggle-title">Duplex Token Streaming</span>
+                    <input id="stream_tokens" name="stream_tokens" type="checkbox" class="toggle-input" />
+                    <span class="toggle-slider"></span>
                   </label>
                 </div>
 
-                <div class="cyber-grid-2">
-                  <div class="cyber-field">
-                    <label for="tts_rate">// SPEECH RATE (WPM)</label>
-                    <input id="tts_rate" name="tts_rate" type="number" min="80" max="300" class="cyber-input" />
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="tts_rate">Speech Speed (WPM)</label>
+                    <input id="tts_rate" name="tts_rate" type="number" min="80" max="300" class="form-control" />
                   </div>
-                  <div class="cyber-field">
-                    <label for="max_record_seconds">// MAX_CAPTURE (SEC)</label>
-                    <input id="max_record_seconds" name="max_record_seconds" type="number" min="2" max="30" step="0.5" class="cyber-input" />
+                  <div class="form-group">
+                    <label for="max_record_seconds">Max Recording (s)</label>
+                    <input id="max_record_seconds" name="max_record_seconds" type="number" min="2" max="30" step="0.5" class="form-control" />
                   </div>
                 </div>
 
-                <div class="cyber-field">
-                  <label for="system_prompt">// DIRECTIVE PERSONA MATRIX</label>
-                  <textarea id="system_prompt" name="system_prompt" rows="3" class="cyber-textarea"></textarea>
+                <div class="form-group">
+                  <label for="system_prompt">System Prompt</label>
+                  <textarea id="system_prompt" name="system_prompt" rows="3" class="form-control font-mono"></textarea>
                 </div>
 
-                <button type="submit" class="hud-btn hud-btn-commit">
-                  <span>COMMIT CONFIGURATION</span>
-                </button>
+                <button type="submit" class="btn btn-primary btn-block">Save Configuration</button>
               </form>
             </div>
 
-            <!-- Tab 2: Agent Tool Modules -->
-            <div id="tabTools" class="hud-tab-content">
-              <div class="module-intro">
-                <span class="cyber-tag">AUTONOMOUS CAPABILITIES</span>
-                <p>J.A.R.V.I.S. invokes these onboard modules dynamically during conversation.</p>
+            <!-- Tools Tab Content -->
+            <div id="tabTools" class="tab-content">
+              <div class="tab-header">
+                <h3>Autonomous Agent Tools</h3>
+                <p>Hola can autonomously invoke these functions to interact with your system.</p>
               </div>
-              <div id="toolsList" class="tools-cyber-grid"></div>
+              <div id="toolsList" class="tools-list"></div>
             </div>
 
-            <!-- Tab 3: Tactical Scratchpad Data -->
-            <div id="tabNotes" class="hud-tab-content">
-              <div class="module-intro">
-                <span class="cyber-tag">SECURE MEMORANDUM MATRIX</span>
-                <p>Persistent notes stored locally on SQLite encrypted volume.</p>
+            <!-- Notes Tab Content -->
+            <div id="tabNotes" class="tab-content">
+              <div class="tab-header">
+                <h3>Persistent Scratchpad</h3>
+                <p>Notes stored in local SQLite database (`assistant_history.db`).</p>
               </div>
-              <div class="note-entry-row">
-                <input id="noteInput" type="text" placeholder="LOG TACTICAL NOTE..." class="cyber-input" />
-                <button id="addNoteBtn" class="hud-btn hud-btn-sm">STORE</button>
+              <div class="note-add-row">
+                <input id="noteInput" type="text" placeholder="Add a new note..." class="form-control" />
+                <button id="addNoteBtn" class="btn btn-secondary">Save</button>
               </div>
-              <div id="notesList" class="cyber-notes-list"></div>
+              <div id="notesList" class="notes-feed"></div>
             </div>
           </div>
         </aside>
       </main>
 
-      <!-- Toast Hologram Notification HUD -->
-      <div id="toast" class="hud-toast" hidden></div>
+      <!-- Toast Feedback -->
+      <div id="toast" class="toast-popup" hidden></div>
     </div>
 
     <script src="/static/app.js"></script>

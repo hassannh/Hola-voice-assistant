@@ -72,8 +72,8 @@ class VoicePipeline:
         self.emit("listening", "Listening…")
 
         def _on_level(level: float) -> None:
-            if level > 0.04:
-                self.emit("audio_level", str(round(level, 3)))
+            if level > 0.005:
+                self.emit("audio_level", str(round(level, 4)))
 
         audio = record_audio(self.settings, on_level=_on_level)
         if self._stop.is_set():
