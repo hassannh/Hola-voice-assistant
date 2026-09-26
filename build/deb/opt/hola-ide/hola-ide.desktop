@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Hola IDE
+GenericName=AI Code Editor
+Comment=AI-Powered Code Editor with Local Ollama & Cloud LLM support
+Exec=/home/hassan/Desktop/personal-assistant/run.sh
+Icon=/home/hassan/Desktop/personal-assistant/voice_assistant/web/static/hola_icon.svg
+Terminal=false
+Categories=Development;IDE;TextEditor;
+Keywords=ide;editor;ai;code;python;developer;
+StartupWMClass=hola-ide
+StartupNotify=true

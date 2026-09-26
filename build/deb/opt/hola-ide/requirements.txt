@@ -1,0 +1,9 @@
+faster-whisper
+sounddevice
+numpy
+pyttsx3
+ollama
+fastapi
+uvicorn
+websockets
+pytest

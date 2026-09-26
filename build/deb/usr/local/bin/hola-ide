@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+cd /opt/hola-ide
+if [ -f "/opt/hola-ide/run.sh" ]; then
+  exec /opt/hola-ide/run.sh "$@"
+else
+  exec python3 /opt/hola-ide/ide.py "$@"
+fi

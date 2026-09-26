@@ -1,0 +1,10 @@
+Package: hola-ide
+Version: 1.0.0
+Section: devel
+Priority: optional
+Architecture: all
+Depends: python3, python3-pip, python3-venv, git
+Maintainer: Hola Team <contact@hola-ide.local>
+Description: Hola IDE — AI-Powered Code Editor with Antigravity Styling
+ A native desktop code editor featuring Monaco Editor, integrated bash terminal,
+ git source control, ripgrep search, and context-aware AI agent with Ollama and cloud LLMs.
