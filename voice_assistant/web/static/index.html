@@ -27,11 +27,11 @@
           <span id="titlebarFile" class="titlebar-file">No file open</span>
         </div>
         <div class="titlebar-center">
-          <div id="ollamaPill" class="tb-pill checking" title="Ollama local daemon">
+          <div id="ollamaPill" class="tb-pill checking" title="Ollama local daemon · Click to configure" style="cursor:pointer">
             <span class="pill-dot"></span>
             <span id="ollamaStatusText">Ollama…</span>
           </div>
-          <div class="tb-pill">
+          <div id="modelPill" class="tb-pill" title="Current Model · Click to change" style="cursor:pointer">
             <span class="pill-key">MODEL</span>
             <span id="activeModelName" class="pill-val">–</span>
           </div>
@@ -158,6 +158,7 @@
               <select id="llm_provider" name="llm_provider" class="cfg-input">
                 <option value="ollama">🦙 Ollama (Local)</option>
                 <option value="groq">⚡ Groq</option>
+                <option value="xai">⚡ xAI (Grok)</option>
                 <option value="openai">🟢 OpenAI</option>
                 <option value="anthropic">🟣 Anthropic</option>
                 <option value="gemini">🔷 Gemini</option>
@@ -186,10 +187,15 @@
                 <label class="cfg-label" for="llm_base_url">Base URL</label>
                 <input id="llm_base_url" name="llm_base_url" class="cfg-input font-mono" placeholder="https://api.openai.com/v1" />
               </div>
-              <button type="button" id="testLlmBtn" class="cfg-btn-secondary">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Test Connection
-              </button>
+              <div style="display:flex;gap:8px;margin-top:6px;">
+                <button type="button" id="testLlmBtn" class="cfg-btn-secondary" style="flex:1">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Test Connection
+                </button>
+                <button type="button" id="saveKeyQuickBtn" class="cfg-btn-primary" style="flex:1;padding:6px 10px;font-size:11px;">
+                  💾 Save Key &amp; Model
+                </button>
+              </div>
               <div id="llmTestResult" class="llm-test-result" hidden></div>
 
               <div class="cfg-section" style="margin-top:16px">VOICE &amp; STT</div>
@@ -291,87 +297,129 @@
           <!-- Bottom Panel Resize Handle -->
           <div class="bottom-panel-resize" id="bottomPanelResize"></div>
 
-          <!-- ── AI Chat Bottom Panel ──────────────────────────── -->
+          <!-- ── Dedicated Bottom Terminal Panel ───────────────── -->
           <div class="ide-bottom-panel" id="ideBottomPanel">
             <div class="bottom-panel-tabs">
-              <button class="bottom-tab active" id="tabAiChat" data-tab="chat">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                AI Agent
-              </button>
-              <button class="bottom-tab" id="tabTerminal" data-tab="terminal">
+              <button class="bottom-tab active" id="tabTerminal">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                 Terminal
               </button>
-              <div class="bottom-panel-meta">
-                <span id="chatContextFile" class="chat-context-pill" hidden>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
-                  <span id="chatContextFileName">–</span>
-                </span>
-              </div>
-              <div class="bottom-panel-actions">
-                <button id="clearHistoryBtn" class="bottom-panel-icon-btn" title="Clear chat / terminal">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              
+              <!-- Quick Terminal Task Buttons -->
+              <div class="terminal-quick-actions">
+                <button id="termRunFileBtn" class="term-quick-btn" title="Run current file in Python">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Run File</span>
                 </button>
-                <button id="toggleBottomPanel" class="bottom-panel-icon-btn" title="Collapse panel">
+                <button id="termPytestBtn" class="term-quick-btn" title="Run pytest">
+                  <span>🧪 pytest</span>
+                </button>
+                <button id="termGitStatusBtn" class="term-quick-btn" title="Run git status">
+                  <span>🌿 git status</span>
+                </button>
+                <button id="termClearBtn" class="term-quick-btn" title="Clear terminal screen">
+                  <span>🧹 clear</span>
+                </button>
+              </div>
+
+              <div class="bottom-panel-actions">
+                <button id="toggleBottomPanel" class="bottom-panel-icon-btn" title="Toggle Terminal Height">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
                 </button>
               </div>
             </div>
 
-            <!-- Chat View Tab Content -->
-            <div id="bottomChatView" class="bottom-panel-view active">
-              <div class="ai-chat-body">
-                <!-- Chat messages feed -->
-                <div id="chatHistory" class="ide-chat-feed" role="log" aria-live="polite">
-                  <div class="ide-chat-empty">
-                    <div class="ide-chat-empty-icon">⌘</div>
-                    <p>Ask Hola to explain code, generate diffs, fix bugs, or run terminal commands.</p>
-                    <div class="ide-chat-chips">
-                      <button class="chat-chip" data-query="Explain this file">📄 Explain file</button>
-                      <button class="chat-chip" data-query="Find bugs in this code">🐛 Find bugs</button>
-                      <button class="chat-chip" data-query="Write unit tests for this">🧪 Write tests</button>
-                      <button class="chat-chip" data-query="Refactor for readability">✨ Refactor</button>
-                      <button class="chat-chip" data-query="Run git status">💾 Git status</button>
-                    </div>
-                  </div>
-                </div>
-                <div id="chatPagination" class="chat-pagination-bar compact-pagination"></div>
-
-                <!-- Input dock -->
-                <div class="ide-chat-input-dock">
-                  <form id="textChatForm" class="ide-chat-form">
-                    <div class="ide-chat-input-wrap">
-                      <textarea
-                        id="promptInput"
-                        class="ide-chat-textarea"
-                        placeholder="Ask Hola… (Shift+Enter for newline)"
-                        rows="1"
-                        autocomplete="off"
-                        aria-label="Chat input"
-                      ></textarea>
-                    </div>
-                    <div class="ide-chat-controls">
-                      <label class="speak-switch" title="Text-to-speech">
-                        <input id="speakReplyToggle" type="checkbox" checked />
-                        <span class="switch-ui"></span>
-                        <span class="switch-label">TTS</span>
-                      </label>
-                      <button id="sendBtn" type="submit" class="ide-send-btn" title="Send (Enter)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-
-            <!-- Terminal View Tab Content -->
-            <div id="bottomTerminalView" class="bottom-panel-view" hidden>
+            <!-- Terminal View Container -->
+            <div id="bottomTerminalView" class="bottom-panel-view active">
               <div id="terminalContainer" class="terminal-container"></div>
             </div>
           </div>
 
         </div><!-- /ide-main -->
+
+        <!-- ── Right-Side Antigravity AI Agent Dock ──────────────────── -->
+        <aside class="ide-agent-panel" id="ideAgentPanel" role="region" aria-label="Antigravity AI Agent">
+          <div class="agent-panel-resize" id="agentPanelResize"></div>
+          
+          <div class="agent-panel-header">
+            <div class="agent-panel-title-wrap">
+              <span class="agent-logo-glyph">⌘</span>
+              <span class="agent-panel-title">Hola Agent</span>
+              <span id="chatContextBudget" class="budget-pill" title="ECC Context Budget Monitor">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span id="chatContextBudgetText">Ready</span>
+              </span>
+              <span id="chatContextFile" class="chat-context-pill" hidden>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                <span id="chatContextFileName">–</span>
+              </span>
+            </div>
+            <div class="agent-panel-actions">
+              <button id="agentVoiceMuteBtn" class="bottom-panel-icon-btn voice-mute-btn" title="Toggle Agent Voice (Sound On / Read text only)">
+                <svg id="voiceIconActive" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                <svg id="voiceIconMuted" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              </button>
+              <button id="clearHistoryBtn" class="bottom-panel-icon-btn" title="Clear chat history">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+              <button id="toggleAgentPanel" class="bottom-panel-icon-btn" title="Toggle AI Agent Dock (Ctrl+`)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat body -->
+          <div class="ai-chat-body">
+            <!-- Chat messages feed -->
+            <div id="chatHistory" class="ide-chat-feed" role="log" aria-live="polite">
+              <div class="ide-chat-empty">
+                <div class="ide-chat-empty-icon">⌘</div>
+                <p>Autonomous AI pair programmer powered by the ECC engineering harness. Plan architectures, write TDD tests, isolate bugs, and verify with terminal commands.</p>
+                <div class="ide-chat-chips">
+                  <button class="chat-chip" data-query="/plan Refactor current module with risk assessment">⚡ /plan</button>
+                  <button class="chat-chip" data-query="/fix Diagnose and fix error in active file">🐛 /fix</button>
+                  <button class="chat-chip" data-query="/test Write and run pytest suite">🧪 /test</button>
+                  <button class="chat-chip" data-query="/review Check security, edge cases, and performance">🛡️ /review</button>
+                  <button class="chat-chip" data-query="/search Find symbol definitions and usages">🔍 /search</button>
+                </div>
+              </div>
+            </div>
+            <div id="chatPagination" class="chat-pagination-bar compact-pagination"></div>
+
+            <!-- Input dock -->
+            <div class="ide-chat-input-dock">
+              <div class="ecc-action-bar">
+                <button type="button" class="ecc-pill" data-prefix="/plan " title="Architectural decomposition & risk check">⚡ /plan</button>
+                <button type="button" class="ecc-pill" data-prefix="/fix " title="Root-cause debugging & repair">🐛 /fix</button>
+                <button type="button" class="ecc-pill" data-prefix="/test " title="Test-driven development (TDD)">🧪 /test</button>
+                <button type="button" class="ecc-pill" data-prefix="/review " title="Security & edge-case audit">🛡️ /review</button>
+                <button type="button" class="ecc-pill" data-prefix="/search " title="Codebase & web research">🔍 /search</button>
+              </div>
+              <form id="textChatForm" class="ide-chat-form">
+                <div class="ide-chat-input-wrap">
+                  <textarea
+                    id="promptInput"
+                    class="ide-chat-textarea"
+                    placeholder="Ask Hola Agent… (Shift+Enter for newline)"
+                    rows="1"
+                    autocomplete="off"
+                    aria-label="Chat input"
+                  ></textarea>
+                </div>
+                <div class="ide-chat-controls">
+                  <label class="speak-switch" title="Agent Voice Output (Sound On / Read text only)">
+                    <input id="speakReplyToggle" type="checkbox" checked />
+                    <span class="switch-ui"></span>
+                    <span class="switch-label" id="speakSwitchLabel">Voice</span>
+                  </label>
+                  <button id="sendBtn" type="submit" class="ide-send-btn" title="Send (Enter)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </aside>
       </div><!-- /ide-workspace -->
 
       <!-- Status bar -->
@@ -419,15 +467,46 @@
       </div>
     </div>
 
+    <!-- ── Floating AI Code Lens Widget ──────────────────────── -->
+    <div id="editorAiLens" class="editor-ai-lens" hidden>
+      <div class="ai-lens-header">
+        <span class="ai-lens-icon">⌘</span>
+        <span>Hola AI Lens</span>
+      </div>
+      <div class="ai-lens-actions">
+        <button class="ai-lens-btn" data-action="explain" title="Explain selected code">⚡ Explain</button>
+        <button class="ai-lens-btn" data-action="refactor" title="Refactor & optimize selected code">✨ Refactor</button>
+        <button class="ai-lens-btn" data-action="tests" title="Generate pytest unit tests">🧪 Tests</button>
+        <button class="ai-lens-btn" data-action="audit" title="Check for bugs or security issues">🐞 Audit</button>
+      </div>
+    </div>
+
+    <!-- ── Monaco Diff Viewer Modal ──────────────────────────── -->
+    <div id="diffViewerModal" class="palette-modal-backdrop" hidden>
+      <div class="diff-modal" role="dialog" aria-modal="true" aria-label="Review Code Diff">
+        <div class="diff-modal-header">
+          <div class="diff-modal-title">
+            <span class="diff-icon">⚖️</span>
+            <span id="diffModalFilename">Review Changes</span>
+          </div>
+          <div class="diff-modal-actions">
+            <button id="diffApplyBtn" class="primary-btn sm-btn">✨ Apply to Editor</button>
+            <button id="diffCloseBtn" class="panel-icon-btn" title="Close (Esc)">✕</button>
+          </div>
+        </div>
+        <div id="monacoDiffContainer" class="diff-editor-container"></div>
+      </div>
+    </div>
+
+    <!-- xterm.js CDN loader (Loaded before Monaco to prevent AMD conflict) -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
     <!-- Monaco Editor CDN loader -->
     <script>
       var require = { paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
-
-    <!-- xterm.js CDN loader -->
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 
     <!-- App modules (order matters) -->
     <script src="/static/js/api.js"></script>

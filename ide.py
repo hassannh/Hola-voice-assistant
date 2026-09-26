@@ -10,9 +10,15 @@ Usage:
 from __future__ import annotations
 
 import os
+import sys
+
+# Auto re-exec into project venv if running with system python
+_venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "python")
+if os.path.exists(_venv_python) and os.path.realpath(sys.executable) != os.path.realpath(_venv_python):
+    os.execv(_venv_python, [_venv_python] + sys.argv)
+
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import urllib.request
@@ -84,7 +90,7 @@ def _launch_pywebview(url: str, debug: bool = False) -> None:
 
 def main() -> None:
     print("✨ Starting Hola IDE backend...")
-    settings = Settings()
+    settings = Settings.from_env()
 
     # Start FastAPI backend in background thread
     t = threading.Thread(target=_start_server, args=(settings,), daemon=True)
@@ -106,6 +112,15 @@ def main() -> None:
         sys.exit(1)
 
     print(f"⚡ Backend ready at {URL}")
+
+    # Mode 0: Server only (headless background)
+    if "--server-only" in sys.argv:
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        sys.exit(0)
 
     # Mode 1: Browser tab
     if "--browser" in sys.argv:

@@ -31,6 +31,11 @@ const API = (() => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, speak }),
     }),
+    toggleVoiceMute: (enabled) => _fetch("/api/voice/mute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(enabled !== undefined ? { enabled } : {}),
+    }),
     // IDE endpoints
     getTree: (root) => _fetch(`/api/ide/tree?root=${encodeURIComponent(root || ".")}`),
     getFile: (path) => _fetch(`/api/ide/file?path=${encodeURIComponent(path)}`),

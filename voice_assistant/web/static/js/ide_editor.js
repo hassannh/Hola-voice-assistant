@@ -104,6 +104,33 @@ const EditorModule = (() => {
         }
       });
 
+      // Floating AI Code Lens on Selection
+      _editor.onDidChangeCursorSelection(() => {
+        const selection = _editor.getSelection();
+        const lens = $('editorAiLens');
+        if (!selection || selection.isEmpty()) {
+          if (lens) lens.hidden = true;
+          return;
+        }
+        const model = _editor.getModel();
+        if (!model) return;
+        const text = model.getValueInRange(selection);
+        if (!text || text.trim().length === 0) {
+          if (lens) lens.hidden = true;
+          return;
+        }
+
+        const editorPos = container.getBoundingClientRect();
+        const endPos = _editor.getScrolledVisiblePosition(selection.getEndPosition());
+        if (endPos && lens) {
+          lens.hidden = false;
+          const top = Math.max(10, editorPos.top + endPos.top - 40);
+          const left = Math.min(window.innerWidth - 320, Math.max(10, editorPos.left + endPos.left));
+          lens.style.top = `${top}px`;
+          lens.style.left = `${left}px`;
+        }
+      });
+
       // Content change tracking for modified indicator
       _editor.onDidChangeModelContent(() => {
         const tab = _tabs.find((t) => t.path === _activePath);
@@ -131,6 +158,22 @@ const EditorModule = (() => {
         openFile(path, language, content);
       }
     });
+
+    // Wire AI Lens Action Buttons
+    const lens = $('editorAiLens');
+    if (lens) {
+      lens.addEventListener('click', (e) => {
+        const btn = e.target.closest('.ai-lens-btn');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        if (!_editor) return;
+        const selection = _editor.getSelection();
+        if (!selection) return;
+        const text = _editor.getModel().getValueInRange(selection);
+        lens.hidden = true;
+        _triggerAiLensAction(action, text);
+      });
+    }
   }
 
   _loadMonaco();
@@ -352,6 +395,82 @@ const EditorModule = (() => {
     }
   }
 
+  function _triggerAiLensAction(action, code) {
+    const lang = getCurrentLanguage();
+    const filename = _activePath ? _activePath.split('/').pop() : 'selection';
+    const prompts = {
+      explain: `Please explain the architecture and step-by-step logic of this ${lang} snippet from ${filename}:\n\n\`\`\`${lang}\n${code}\n\`\`\``,
+      refactor: `Please perform a surgical refactor of this ${lang} snippet from ${filename} for performance, clarity, and type safety with zero regressions. Provide the complete improved version:\n\n\`\`\`${lang}\n${code}\n\`\`\``,
+      tests: `/test Write comprehensive unit tests for this ${lang} snippet from ${filename}, covering normal flows, edge cases, and error conditions:\n\n\`\`\`${lang}\n${code}\n\`\`\``,
+      audit: `/review Conduct a rigorous code review of this ${lang} snippet from ${filename} checking for bugs, security vulnerabilities, edge cases, and performance:\n\n\`\`\`${lang}\n${code}\n\`\`\``,
+    };
+
+    const promptText = prompts[action] || prompts.explain;
+
+    // Ensure right AI dock is visible
+    const agentPanel = $('ideAgentPanel');
+    if (agentPanel && agentPanel.hidden) {
+      agentPanel.hidden = false;
+    }
+
+    if (window.IdeChatModule?.sendPrompt) {
+      IdeChatModule.sendPrompt(promptText);
+    }
+  }
+
+  let _diffEditor = null;
+  function showDiff(originalCode, modifiedCode, filename) {
+    const modal = $('diffViewerModal');
+    const container = $('monacoDiffContainer');
+    const titleEl = $('diffModalFilename');
+    const closeBtn = $('diffCloseBtn');
+    const applyBtn = $('diffApplyBtn');
+
+    if (!modal || !container || typeof monaco === 'undefined') return;
+
+    if (titleEl) titleEl.textContent = `Review Changes: ${filename || 'Code Diff'}`;
+    modal.hidden = false;
+
+    const lang = _detectLanguageFromPath(filename || 'file.py');
+
+    if (!_diffEditor) {
+      _diffEditor = monaco.editor.createDiffEditor(container, {
+        originalEditable: false,
+        theme: 'antigravity-dark',
+        automaticLayout: true,
+        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+        fontSize: 13,
+      });
+    }
+
+    const originalModel = monaco.editor.createModel(originalCode || '', lang);
+    const modifiedModel = monaco.editor.createModel(modifiedCode || '', lang);
+    _diffEditor.setModel({
+      original: originalModel,
+      modified: modifiedModel,
+    });
+
+    const closeModal = () => {
+      modal.hidden = true;
+    };
+
+    if (closeBtn) {
+      closeBtn.onclick = closeModal;
+    }
+
+    if (applyBtn) {
+      applyBtn.onclick = () => {
+        if (_editor) {
+          _editor.setValue(modifiedCode);
+        }
+        closeModal();
+        if (window.UIModule?.showToast) {
+          UIModule.showToast(`Applied changes to ${filename || 'editor'}`);
+        }
+      };
+    }
+  }
+
   return {
     init,
     openFile,
@@ -360,6 +479,7 @@ const EditorModule = (() => {
     saveCurrentFile,
     createNewFile,
     revealLine,
+    showDiff,
     getCurrentPath: () => _activePath,
     getCurrentContent: () => (_editor ? _editor.getValue() : (_tabs.find((t) => t.path === _activePath)?.content || '')),
     getCurrentLanguage: () => _tabs.find((t) => t.path === _activePath)?.language || 'plaintext',

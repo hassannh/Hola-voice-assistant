@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -38,6 +38,7 @@ class SettingsUpdate(BaseModel):
     input_device: Optional[int] = None
     system_prompt: Optional[str] = None
     enable_tools: Optional[bool] = None
+    enable_tts: Optional[bool] = None
     wake_word: Optional[str] = None
     stream_tokens: Optional[bool] = None
 
@@ -52,6 +53,10 @@ class TestConnectionRequest(BaseModel):
 class ChatRequest(BaseModel):
     text: str = Field(..., min_length=1)
     speak: bool = False
+
+
+class VoiceMuteRequest(BaseModel):
+    enabled: Optional[bool] = None
 
 
 class Hub:
@@ -81,6 +86,41 @@ class Hub:
                 dead.append(client)
         for client in dead:
             self.clients.discard(client)
+
+
+def _get_providers_with_status(settings: Settings) -> dict[str, dict[str, Any]]:
+    result = {}
+    for pid, meta in PROVIDER_REGISTRY.items():
+        p_dict = dict(meta)
+        if pid == "ollama":
+            p_dict["has_key"] = True
+            p_dict["key_configured"] = True
+            p_dict["masked_key"] = ""
+        else:
+            has_key = False
+            masked_key = ""
+            if settings.llm_provider == pid and settings.llm_api_key:
+                has_key = True
+                k = settings.llm_api_key.strip()
+                masked_key = f"{k[:4]}••••{k[-4:]}" if len(k) > 8 else "••••••••"
+            else:
+                env_names = [f"{pid.upper()}_API_KEY", f"VOICE_{pid.upper()}_API_KEY"]
+                if pid == "xai":
+                    env_names.append("XAI_API_KEY")
+                elif pid == "groq":
+                    env_names.append("GROQ_API_KEY")
+                for ev in env_names:
+                    val = os.environ.get(ev)
+                    if val and val.strip():
+                        has_key = True
+                        k = val.strip()
+                        masked_key = f"{k[:4]}••••{k[-4:]}" if len(k) > 8 else "••••••••"
+                        break
+            p_dict["has_key"] = has_key
+            p_dict["key_configured"] = has_key
+            p_dict["masked_key"] = masked_key
+        result[pid] = p_dict
+    return result
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -117,12 +157,12 @@ def create_app(settings: Settings) -> FastAPI:
             "notes": runtime.db.get_all_notes(),
             "audio_error": audio_backend_error(),
             "ollama": probe_ollama(runtime.settings),
-            "providers": PROVIDER_REGISTRY,
+            "providers": _get_providers_with_status(runtime.settings),
         }
 
     @app.get("/api/llm/providers")
     async def list_providers() -> dict:
-        return {"ok": True, "providers": PROVIDER_REGISTRY}
+        return {"ok": True, "providers": _get_providers_with_status(runtime.settings)}
 
     @app.post("/api/llm/test")
     async def test_llm(body: TestConnectionRequest) -> dict:
@@ -159,7 +199,7 @@ def create_app(settings: Settings) -> FastAPI:
     async def chat(body: ChatRequest) -> dict:
         try:
             reply = await asyncio.to_thread(runtime.chat_text, body.text, body.speak)
-            return {"ok": True, "reply": reply}
+            return {"ok": True, "reply": reply, "text": reply}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -167,6 +207,14 @@ def create_app(settings: Settings) -> FastAPI:
     async def clear_history() -> dict:
         await asyncio.to_thread(runtime.clear_history)
         return {"ok": True}
+
+    @app.post("/api/voice/mute")
+    async def toggle_voice_mute(body: VoiceMuteRequest = VoiceMuteRequest()) -> dict:
+        enabled = body.enabled
+        if enabled is None:
+            enabled = not runtime.settings.enable_tts
+        runtime.set_voice_output(bool(enabled))
+        return {"ok": True, "enable_tts": runtime.settings.enable_tts}
 
     @app.post("/api/ollama/pull")
     async def pull_model() -> dict:
@@ -201,7 +249,11 @@ def create_app(settings: Settings) -> FastAPI:
             runtime.apply_settings(**changes)
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
-        return {"ok": True, "settings": runtime.settings.public_dict()}
+        return {
+            "ok": True,
+            "settings": runtime.settings.public_dict(),
+            "providers": _get_providers_with_status(runtime.settings),
+        }
 
     @app.websocket("/ws")
     async def websocket(ws: WebSocket) -> None:

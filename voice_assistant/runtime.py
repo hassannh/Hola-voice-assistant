@@ -8,7 +8,7 @@ from voice_assistant.db import Database
 from voice_assistant.llm import BaseChat, create_chat_client
 from voice_assistant.pipeline import VoicePipeline
 from voice_assistant.stt import WhisperTranscriber
-from voice_assistant.tools import ToolRegistry
+from voice_assistant.tools import ToolRegistry, format_tool_action_label
 from voice_assistant.tts import PyttsxSpeaker
 
 log = logging.getLogger(__name__)
@@ -60,6 +60,8 @@ class AssistantRuntime:
             env_updates["VOICE_STT_MODEL"] = self.settings.stt_model_size
         if "tts_rate" in changes:
             env_updates["VOICE_TTS_RATE"] = str(self.settings.tts_rate)
+        if "enable_tts" in changes:
+            env_updates["VOICE_ENABLE_TTS"] = str(self.settings.enable_tts)
         if env_updates:
             try:
                 save_dotenv_changes(env_updates)
@@ -137,14 +139,22 @@ class AssistantRuntime:
             for t in self.tools.tools.values()
         ]
 
+    def set_voice_output(self, enabled: bool) -> bool:
+        """Dynamically enable or mute agent voice output across text chat and voice pipeline."""
+        self.settings.enable_tts = enabled
+        if self.pipeline is not None and hasattr(self.pipeline, "settings"):
+            self.pipeline.settings.enable_tts = enabled
+        return enabled
+
     def chat_text(self, text: str, speak: bool = False) -> str:
         """Process typed text directly through the agent runtime."""
         self.ensure_chat()
-        if speak:
+        effective_speak = speak and self.settings.enable_tts
+        if effective_speak:
             self.ensure_speaker()
         assert self._chat
 
-        self._handle_event("user", text)
+        # User message is already rendered in the UI on submission; voice pipeline emits separately
         self._handle_event("thinking", "Thinking…")
 
         full_tokens: list[str] = []
@@ -154,7 +164,8 @@ class AssistantRuntime:
             self._handle_event("token", token)
 
         def on_tool(name: str, args: dict) -> None:
-            self._handle_event("tool_start", f"Running tool: {name}")
+            label = format_tool_action_label(name, args)
+            self._handle_event("tool_start", label)
 
         generator = self._chat.stream_reply(text, on_token=on_token, on_tool_start=on_tool)
 
@@ -165,7 +176,7 @@ class AssistantRuntime:
                 yielded_chunks.append(chunk)
                 yield chunk
 
-        if speak:
+        if effective_speak:
             self._speaker.speak_stream(_chunk_collector())
         else:
             list(_chunk_collector())

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any, Callable, Generator, List, Optional
 
@@ -51,6 +52,20 @@ PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
             "deepseek-r1-distill-llama-70b",
             "compound-beta",
             "compound-beta-mini",
+        ],
+    },
+    "xai": {
+        "id": "xai",
+        "name": "xAI (Grok)",
+        "badge": "⚡ Grok",
+        "default_model": "grok-2-latest",
+        "default_base_url": "https://api.x.ai/v1",
+        "requires_key": True,
+        "key_hint": "xai-...",
+        "models": [
+            "grok-2-latest",
+            "grok-2-mini",
+            "grok-beta",
         ],
     },
     "openai": {
@@ -287,7 +302,12 @@ class OllamaChat(BaseChat):
         tools_spec = self._get_tools_spec()
 
         try:
-            if tools_spec:
+            max_turns = 8
+            turn = 0
+            final_text = ""
+
+            while turn < max_turns and tools_spec:
+                turn += 1
                 initial_resp = self._client.chat(
                     model=self._model,
                     messages=self._history,
@@ -298,7 +318,22 @@ class OllamaChat(BaseChat):
 
                 if tool_calls:
                     executed = self._handle_tool_calls(tool_calls, on_tool_start=on_tool_start)
-                    self.db.add_message(role="assistant", content="[Executed Tools]", tool_calls=executed)
+                    self.db.add_message(role="assistant", content=f"[Autonomous Actions: {', '.join(e['name'] for e in executed)}]", tool_calls=executed)
+                    continue
+                else:
+                    content = msg_obj.get("content") if isinstance(msg_obj, dict) else getattr(msg_obj, "content", "")
+                    if content:
+                        final_text = content
+                    break
+
+            if final_text:
+                for token in final_text.split(" "):
+                    if on_token:
+                        on_token(token + " ")
+                    yield token + " "
+                self._history.append({"role": "assistant", "content": final_text})
+                self.db.add_message(role="assistant", content=final_text)
+                return
 
             response_stream = self._client.chat(
                 model=self._model,
@@ -430,14 +465,26 @@ class OpenAICompatibleChat(BaseChat):
         cleaned = []
         for m in self._history:
             role = m.get("role")
-            content = m.get("content")
+            content = m.get("content") or ""
+            if role == "tool" and len(content) > 1200:
+                content = content[:1200] + "\n... [Observation truncated for token efficiency]"
+
             if role in ("system", "user", "assistant", "tool"):
-                item: dict[str, Any] = {"role": role, "content": content or ""}
+                item: dict[str, Any] = {"role": role, "content": content}
                 if role == "tool" and "tool_call_id" in m:
                     item["tool_call_id"] = m["tool_call_id"]
                 if role == "assistant" and "tool_calls" in m:
                     item["tool_calls"] = m["tool_calls"]
                 cleaned.append(item)
+
+        # Keep system prompt + most recent turns to stay well within provider TPM limits
+        if len(cleaned) > 12:
+            system_msg = cleaned[0:1] if cleaned and cleaned[0].get("role") == "system" else []
+            recent = cleaned[-11:]
+            while recent and recent[0].get("role") == "tool":
+                recent = recent[1:]
+            cleaned = system_msg + recent
+
         return cleaned
 
     def stream_reply(
@@ -462,43 +509,80 @@ class OpenAICompatibleChat(BaseChat):
         tools_spec = self._get_tools_spec()
 
         try:
-            # 1. Preflight tool execution check if tools enabled
-            if tools_spec:
-                payload = {
-                    "model": self._model,
-                    "messages": self._prepare_messages(),
-                    "tools": tools_spec,
-                    "stream": False,
-                }
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.post(endpoint, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        choice = data.get("choices", [{}])[0]
-                        msg = choice.get("message", {})
-                        tool_calls = msg.get("tool_calls")
-                        if tool_calls:
-                            self._history.append({
-                                "role": "assistant",
-                                "content": msg.get("content") or "",
-                                "tool_calls": tool_calls,
-                            })
-                            executed = self._handle_tool_calls(tool_calls, on_tool_start=on_tool_start)
-                            self.db.add_message(role="assistant", content="[Executed Tools]", tool_calls=executed)
-                        elif msg.get("content"):
-                            # If no tools called, we already have complete text!
-                            full_reply_text = msg["content"]
-                            for char in full_reply_text:
-                                if on_token:
-                                    on_token(char)
-                            yield full_reply_text
-                            self._history.append({"role": "assistant", "content": full_reply_text})
-                            self.db.add_message(role="assistant", content=full_reply_text)
-                            return
-                    else:
-                        log.warning("Tool preflight returned status %s: %s", resp.status_code, resp.text[:200])
+            # 1. Multi-turn autonomous ReAct tool loop (up to 4 steps)
+            max_turns = 4
+            turn = 0
+            final_text = ""
 
-            # 2. Stream generation for final spoken response
+            if tools_spec:
+                with httpx.Client(timeout=60.0) as client:
+                    while turn < max_turns:
+                        turn += 1
+
+                        payload = {
+                            "model": self._model,
+                            "messages": self._prepare_messages(),
+                            "tools": tools_spec,
+                            "stream": False,
+                        }
+
+                        resp = client.post(endpoint, headers=headers, json=payload)
+                        if resp.status_code == 429:
+                            match = re.search(r"try again in ([0-9.]+)s", resp.text)
+                            wait_s = float(match.group(1)) + 0.6 if match else 6.0
+                            log.warning("Rate limit (429) on turn %d. Waiting %.1fs...", turn, wait_s)
+                            time.sleep(min(wait_s, 12.0))
+                            resp = client.post(endpoint, headers=headers, json=payload)
+
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            choice = data.get("choices", [{}])[0]
+                            msg = choice.get("message", {})
+                            tool_calls = msg.get("tool_calls")
+                            if tool_calls and turn < max_turns:
+                                self._history.append({
+                                    "role": "assistant",
+                                    "content": msg.get("content") or "",
+                                    "tool_calls": tool_calls,
+                                })
+                                executed = self._handle_tool_calls(tool_calls, on_tool_start=on_tool_start)
+                                self.db.add_message(
+                                    role="assistant",
+                                    content=f"[Autonomous Actions: {', '.join(e['name'] for e in executed)}]",
+                                    tool_calls=executed,
+                                )
+                                if turn == max_turns - 1:
+                                    # Prompt the model to conclude with final answer on next turn
+                                    self._history.append({
+                                        "role": "user",
+                                        "content": "Please synthesize all observations and write your complete final solution.",
+                                    })
+                                continue
+                            else:
+                                content = msg.get("content") or msg.get("reasoning") or msg.get("reasoning_content") or ""
+                                if content:
+                                    final_text = content
+                                break
+                        else:
+                            log.warning("Tool turn %d returned status %s: %s", turn, resp.status_code, resp.text[:200])
+                            break
+
+            if final_text:
+                # Deliver final synthesized answer
+                words = final_text.split(" ")
+                chunk_size = 3
+                for i in range(0, len(words), chunk_size):
+                    chunk = " ".join(words[i : i + chunk_size])
+                    if i + chunk_size < len(words):
+                        chunk += " "
+                    if on_token:
+                        on_token(chunk)
+                    yield chunk
+                self._history.append({"role": "assistant", "content": final_text})
+                self.db.add_message(role="assistant", content=final_text)
+                return
+
+            # 2. Stream generation for final response (when tools disabled or direct stream)
             stream_payload = {
                 "model": self._model,
                 "messages": self._prepare_messages(),
@@ -506,54 +590,73 @@ class OpenAICompatibleChat(BaseChat):
             }
 
             full_reply: list[str] = []
+            reasoning_buffer: list[str] = []
             sentence_buffer: list[str] = []
             sentence_delimiters = {".", "!", "?", "\n"}
 
             with httpx.Client(timeout=45.0) as client:
-                with client.stream("POST", endpoint, headers=headers, json=stream_payload) as response:
-                    if response.status_code != 200:
-                        error_detail = response.read().decode("utf-8", errors="replace")
-                        raise LanguageModelError(
-                            f"{self._provider.upper()} API error (HTTP {response.status_code}): {error_detail}"
-                        )
-
-                    for raw_line in response.iter_lines():
-                        line = raw_line.strip()
-                        if not line or not line.startswith("data:"):
+                for retry in range(2):
+                    with client.stream("POST", endpoint, headers=headers, json=stream_payload) as response:
+                        if response.status_code == 429 and retry == 0:
+                            error_detail = response.read().decode("utf-8", errors="replace")
+                            match = re.search(r"try again in ([0-9.]+)s", error_detail)
+                            wait_s = float(match.group(1)) + 0.6 if match else 5.0
+                            log.warning("Rate limit (429) on stream. Waiting %.1fs...", wait_s)
+                            time.sleep(min(wait_s, 10.0))
                             continue
-                        data_part = line[5:].strip()
-                        if data_part == "[DONE]":
-                            break
+                        elif response.status_code != 200:
+                            error_detail = response.read().decode("utf-8", errors="replace")
+                            raise LanguageModelError(
+                                f"{self._provider.upper()} API error (HTTP {response.status_code}): {error_detail}"
+                            )
 
-                        try:
-                            chunk = json.loads(data_part)
-                            choice = chunk.get("choices", [{}])[0]
-                            delta = choice.get("delta", {})
-                            # Some reasoning models (e.g. gpt-oss-120b) put
-                            # output in reasoning_content instead of content.
-                            token = delta.get("content") or delta.get("reasoning_content", "")
-                        except Exception:
-                            continue
+                        for raw_line in response.iter_lines():
+                            line = raw_line.strip()
+                            if not line or not line.startswith("data:"):
+                                continue
+                            data_part = line[5:].strip()
+                            if data_part == "[DONE]":
+                                break
 
-                        if not token:
-                            continue
+                            try:
+                                chunk = json.loads(data_part)
+                                choice = chunk.get("choices", [{}])[0]
+                                delta = choice.get("delta", {})
+                                token = delta.get("content")
+                                cot = delta.get("reasoning") or delta.get("reasoning_content")
+                                if cot and not token:
+                                    reasoning_buffer.append(cot)
+                                    continue
+                            except Exception:
+                                continue
 
-                        full_reply.append(token)
-                        sentence_buffer.append(token)
+                            if not token:
+                                continue
 
-                        if on_token:
-                            on_token(token)
+                            full_reply.append(token)
+                            sentence_buffer.append(token)
 
-                        joined_buffer = "".join(sentence_buffer)
-                        if any(delim in token for delim in sentence_delimiters) and len(joined_buffer.strip()) > 15:
-                            yield joined_buffer.strip()
-                            sentence_buffer.clear()
+                            if on_token:
+                                on_token(token)
+
+                            joined_buffer = "".join(sentence_buffer)
+                            if any(delim in token for delim in sentence_delimiters) and len(joined_buffer.strip()) > 15:
+                                yield joined_buffer.strip()
+                                sentence_buffer.clear()
+                        break
 
             remaining = "".join(sentence_buffer).strip()
             if remaining:
                 yield remaining
 
             final_text = "".join(full_reply).strip()
+            if not final_text and reasoning_buffer:
+                final_text = "".join(reasoning_buffer).strip()
+                if final_text:
+                    if on_token:
+                        on_token(final_text)
+                    yield final_text
+
             if not final_text:
                 raise LanguageModelError("The model returned an empty reply.")
 
@@ -778,8 +881,8 @@ def test_llm_connection(
                     return {"ok": False, "error": f"{provider.upper()} HTTP {r.status_code}: {r.text[:200]}"}
                 data = r.json()
                 msg_obj = data.get("choices", [{}])[0].get("message", {})
-                # Reasoning models may return output in reasoning_content instead of content
-                reply = msg_obj.get("content") or msg_obj.get("reasoning_content", "")
+                # Reasoning models may return output in reasoning or reasoning_content instead of content
+                reply = msg_obj.get("content") or msg_obj.get("reasoning") or msg_obj.get("reasoning_content", "")
 
         elapsed_ms = round((time.time() - start_time) * 1000)
         return {

@@ -6,7 +6,6 @@
 const UIModule = (() => {
   const $ = (id) => document.getElementById(id);
   let _toastTimer = null;
-  let _cachedProviders = {};
 
   function showToast(msg, duration = 3000) {
     const t = $('toast');
@@ -90,6 +89,9 @@ const UIModule = (() => {
     if (window.ChatModule) return ChatModule.clearChat();
   }
 
+  let _cachedProviders = {};
+  let _currentSettings = null;
+
   function setProviders(providers) {
     _cachedProviders = providers || {};
   }
@@ -124,9 +126,14 @@ const UIModule = (() => {
         pill.textContent = m.split('/').pop();
         pill.title = m;
         pill.addEventListener('click', () => {
-          if (modelInput) modelInput.value = m;
+          if (modelInput) {
+            modelInput.value = m;
+            modelInput.dispatchEvent(new Event('input'));
+          }
           pillsWrap.querySelectorAll('.quick-pill').forEach((p) => p.classList.remove('active'));
           pill.classList.add('active');
+          const activeModelName = $('activeModelName');
+          if (activeModelName) activeModelName.textContent = m;
         });
         pillsWrap.appendChild(pill);
       });
@@ -139,13 +146,19 @@ const UIModule = (() => {
           apiKeyBadge.className = 'key-status-badge configured';
         }
       } else {
+        const hasKey = Boolean(meta.has_key || (_currentSettings && _currentSettings.llm_provider === providerId && _currentSettings.has_api_key));
         if (apiKeyBadge) {
-          const hasKey = meta.has_key;
           apiKeyBadge.textContent = hasKey ? 'Configured' : 'Not Set';
           apiKeyBadge.className = `key-status-badge ${hasKey ? 'configured' : 'unconfigured'}`;
         }
-        if (apiKeyInput && !apiKeyInput.value) {
-          apiKeyInput.placeholder = meta.key_hint || 'Enter API Key';
+        if (apiKeyInput) {
+          if (hasKey && meta.masked_key && !apiKeyInput.value) {
+            apiKeyInput.placeholder = meta.masked_key;
+          } else if (_currentSettings && _currentSettings.llm_provider === providerId && _currentSettings.llm_api_key_masked && !apiKeyInput.value) {
+            apiKeyInput.placeholder = _currentSettings.llm_api_key_masked;
+          } else if (!apiKeyInput.value) {
+            apiKeyInput.placeholder = meta.key_hint || 'Enter API Key';
+          }
         }
       }
     }
@@ -186,6 +199,7 @@ const UIModule = (() => {
     }
 
     if (!settings) return;
+    _currentSettings = settings;
 
     if ($('llm_provider')) $('llm_provider').value = settings.llm_provider || 'ollama';
     if ($('llm_model')) $('llm_model').value = settings.llm_model || '';
@@ -254,21 +268,24 @@ window.UIModule = UIModule;
     const buttons = document.querySelectorAll('.activity-btn');
     const panels = document.querySelectorAll('.side-panel-view');
 
-    // Chat special redirect
+    // Chat activity button toggles right-side Agent Panel
     if (panelId === 'chat') {
-      const bottomPanel = $('ideBottomPanel');
-      if (bottomPanel) {
-        bottomPanel.classList.remove('collapsed');
-        const promptInput = $('promptInput');
-        if (promptInput) promptInput.focus();
+      const agentPanel = $('ideAgentPanel');
+      if (agentPanel) {
+        agentPanel.classList.toggle('collapsed');
+        if (!agentPanel.classList.contains('collapsed')) {
+          const promptInput = $('promptInput');
+          if (promptInput) promptInput.focus();
+        }
       }
+      return;
     }
 
     // Check if clicking currently active button
     const targetBtn = document.querySelector(`.activity-btn[data-panel="${panelId}"]`);
     const isCurrentlyActive = targetBtn && targetBtn.classList.contains('active');
 
-    if (isCurrentlyActive && _sidebarVisible && panelId !== 'chat') {
+    if (isCurrentlyActive && _sidebarVisible) {
       // Toggle sidebar collapse
       sidePanel.style.display = 'none';
       _sidebarVisible = false;
@@ -311,13 +328,29 @@ window.UIModule = UIModule;
     });
   }
 
-  // 3. Sidebar Horizontal Resize Handle
+  const modelPill = $('modelPill');
+  if (modelPill) {
+    modelPill.addEventListener('click', () => {
+      _switchPanel('settings');
+      $('llm_model')?.focus();
+    });
+  }
+
+  const ollamaPill = $('ollamaPill');
+  if (ollamaPill) {
+    ollamaPill.addEventListener('click', () => {
+      _switchPanel('settings');
+      $('llm_provider')?.focus();
+    });
+  }
+
+  // 3. Sidebar Horizontal Resize Handle (Left)
   const sidePanelResize = $('sidePanelResize');
   const sidePanel = $('ideSidePanel');
   if (sidePanelResize && sidePanel) {
     let isResizing = false;
 
-    sidePanelResize.addEventListener('mousedown', (e) => {
+    sidePanelResize.addEventListener('mousedown', () => {
       isResizing = true;
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
@@ -338,7 +371,42 @@ window.UIModule = UIModule;
     });
   }
 
-  // 4. Bottom Panel Vertical Resize & Collapse
+  // 4. Right-Side Antigravity AI Agent Resize Handle
+  const agentPanelResize = $('agentPanelResize');
+  const agentPanel = $('ideAgentPanel');
+  const toggleAgentPanel = $('toggleAgentPanel');
+
+  if (toggleAgentPanel && agentPanel) {
+    toggleAgentPanel.addEventListener('click', () => {
+      agentPanel.classList.toggle('collapsed');
+    });
+  }
+
+  if (agentPanelResize && agentPanel) {
+    let isResizingAgent = false;
+
+    agentPanelResize.addEventListener('mousedown', () => {
+      isResizingAgent = true;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isResizingAgent) return;
+      const newWidth = Math.min(800, Math.max(260, window.innerWidth - e.clientX));
+      agentPanel.style.width = `${newWidth}px`;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isResizingAgent) {
+        isResizingAgent = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+  }
+
+  // 5. Bottom Terminal Panel Vertical Resize & Collapse
   const bottomPanelResize = $('bottomPanelResize');
   const bottomPanel = $('ideBottomPanel');
   const toggleBottomPanel = $('toggleBottomPanel');
@@ -349,13 +417,16 @@ window.UIModule = UIModule;
       toggleBottomPanel.querySelector('svg').style.transform = bottomPanel.classList.contains('collapsed')
         ? 'rotate(180deg)'
         : '';
+      setTimeout(() => {
+        window.TerminalModule?.refit();
+      }, 250);
     });
   }
 
   if (bottomPanelResize && bottomPanel) {
     let isResizingBottom = false;
 
-    bottomPanelResize.addEventListener('mousedown', (e) => {
+    bottomPanelResize.addEventListener('mousedown', () => {
       isResizingBottom = true;
       document.body.style.cursor = 'row-resize';
       document.body.style.userSelect = 'none';
@@ -363,9 +434,10 @@ window.UIModule = UIModule;
 
     window.addEventListener('mousemove', (e) => {
       if (!isResizingBottom) return;
-      const newHeight = Math.min(600, Math.max(100, window.innerHeight - e.clientY - 24)); // subtract statusbar
+      const newHeight = Math.min(600, Math.max(80, window.innerHeight - e.clientY - 24)); // subtract statusbar
       bottomPanel.style.height = `${newHeight}px`;
       bottomPanel.classList.remove('collapsed');
+      window.TerminalModule?.refit();
     });
 
     window.addEventListener('mouseup', () => {
@@ -373,7 +445,45 @@ window.UIModule = UIModule;
         isResizingBottom = false;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        window.TerminalModule?.refit();
       }
+    });
+  }
+
+  // 6. Terminal Quick Action Buttons
+  const termRunFileBtn = $('termRunFileBtn');
+  const termPytestBtn = $('termPytestBtn');
+  const termGitStatusBtn = $('termGitStatusBtn');
+  const termClearBtn = $('termClearBtn');
+
+  if (termRunFileBtn) {
+    termRunFileBtn.addEventListener('click', () => {
+      const activePath = window.EditorModule?.getCurrentPath();
+      if (activePath) {
+        const ext = activePath.split('.').pop() || '';
+        const runner = ext === 'py' ? 'python3' : ext === 'js' ? 'node' : ext === 'sh' ? 'bash' : 'cat';
+        window.TerminalModule?.sendCommand(`${runner} "${activePath}"`);
+      } else {
+        window.UIModule?.showToast('No active file open to run');
+      }
+    });
+  }
+
+  if (termPytestBtn) {
+    termPytestBtn.addEventListener('click', () => {
+      window.TerminalModule?.sendCommand('pytest -v');
+    });
+  }
+
+  if (termGitStatusBtn) {
+    termGitStatusBtn.addEventListener('click', () => {
+      window.TerminalModule?.sendCommand('git status');
+    });
+  }
+
+  if (termClearBtn) {
+    termClearBtn.addEventListener('click', () => {
+      window.TerminalModule?.sendCommand('clear');
     });
   }
 
@@ -433,6 +543,28 @@ window.UIModule = UIModule;
     });
   }
 
+  // Real-time API key typing indicator
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', () => {
+      const val = apiKeyInput.value.trim();
+      const apiKeyBadge = $('apiKeyBadge');
+      if (!apiKeyBadge) return;
+      if (val.length > 8) {
+        apiKeyBadge.textContent = 'Ready to Save';
+        apiKeyBadge.className = 'key-status-badge configured';
+      } else if (val.length > 0) {
+        apiKeyBadge.textContent = 'Entering Key...';
+        apiKeyBadge.className = 'key-status-badge unconfigured';
+      } else {
+        const provider = $('llm_provider')?.value || 'ollama';
+        const meta = _cachedProviders[provider] || {};
+        const hasKey = Boolean(meta.has_key || (_currentSettings && _currentSettings.llm_provider === provider && _currentSettings.has_api_key));
+        apiKeyBadge.textContent = hasKey ? 'Configured' : 'Not Set';
+        apiKeyBadge.className = `key-status-badge ${hasKey ? 'configured' : 'unconfigured'}`;
+      }
+    });
+  }
+
   const testLlmBtn = $('testLlmBtn');
   if (testLlmBtn) {
     testLlmBtn.addEventListener('click', async () => {
@@ -459,12 +591,82 @@ window.UIModule = UIModule;
             'success',
             `✓ Connected in ${res.latency_ms}ms!<br><span style="opacity:0.85">Reply: "${res.reply}"</span>`
           );
-          UIModule.showToast(`Connected to ${provider} (${res.latency_ms}ms)`);
+
+          // Update badge immediately to Configured
+          const apiKeyBadge = $('apiKeyBadge');
+          if (apiKeyBadge) {
+            apiKeyBadge.textContent = 'Configured';
+            apiKeyBadge.className = 'key-status-badge configured';
+          }
+
+          // Auto-save this validated configuration so the assistant uses it immediately
+          try {
+            const savePayload = {
+              llm_provider: provider,
+              llm_model: model,
+            };
+            if (apiKey && !apiKey.includes('••••') && !apiKey.includes('***')) {
+              savePayload.llm_api_key = apiKey.trim();
+            }
+            if (baseUrl) savePayload.llm_base_url = baseUrl;
+
+            const saveRes = await API.saveSettings(savePayload);
+            if (saveRes && saveRes.ok) {
+              if (saveRes.settings) _currentSettings = saveRes.settings;
+              if (saveRes.providers) setProviders(saveRes.providers);
+              const activeModelName = $('activeModelName');
+              if (activeModelName) activeModelName.textContent = model;
+              UIModule.showToast(`✓ ${provider.toUpperCase()} (${model}) verified and saved!`);
+            }
+          } catch (autoSaveErr) {
+            console.warn('Auto-save error:', autoSaveErr);
+          }
         } else {
           UIModule.showTestResult('error', `✕ ${res.error}`);
         }
       } catch (err) {
         UIModule.showTestResult('error', `✕ Network error: ${err.message}`);
+      }
+    });
+  }
+
+  // Quick Save Key & Model Button
+  const saveKeyQuickBtn = $('saveKeyQuickBtn');
+  if (saveKeyQuickBtn) {
+    saveKeyQuickBtn.addEventListener('click', async () => {
+      const provider = $('llm_provider')?.value || 'ollama';
+      const model = $('llm_model')?.value || '';
+      const rawApiKey = $('llm_api_key')?.value || '';
+      const baseUrl = provider === 'custom' ? $('llm_base_url')?.value || '' : null;
+
+      const payload = {
+        llm_provider: provider,
+        llm_model: model,
+      };
+      if (rawApiKey && !rawApiKey.includes('••••') && !rawApiKey.includes('***')) {
+        payload.llm_api_key = rawApiKey.trim();
+      }
+      if (baseUrl) payload.llm_base_url = baseUrl;
+
+      try {
+        const data = await API.saveSettings(payload);
+        if (data && data.ok) {
+          if (data.settings) _currentSettings = data.settings;
+          if (data.providers) setProviders(data.providers);
+          const apiKeyBadge = $('apiKeyBadge');
+          if (apiKeyBadge) {
+            apiKeyBadge.textContent = 'Configured';
+            apiKeyBadge.className = 'key-status-badge configured';
+          }
+          const activeModelName = $('activeModelName');
+          if (activeModelName) activeModelName.textContent = model;
+          UIModule.showToast(`✓ Saved ${provider.toUpperCase()} (${model}) successfully!`);
+          UIModule.showTestResult('success', `✓ ${provider.toUpperCase()} (${model}) configuration saved.`);
+        } else {
+          UIModule.showToast('Save error: ' + (data?.error || 'Unknown'));
+        }
+      } catch (err) {
+        UIModule.showToast('Save failure: ' + err.message);
       }
     });
   }
@@ -512,16 +714,32 @@ window.UIModule = UIModule;
   }
 
   // 7. Global Keyboard Shortcuts
+  let _zenActive = false;
+  let _lastZenLeft = '260px';
+  let _lastZenRight = '420px';
+
   window.addEventListener('keydown', (e) => {
-    // Ctrl+` (backtick) toggles AI chat bottom panel
-    if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+    // Ctrl+` (backtick) or Ctrl+Shift+A toggles Right-Side AI Agent Dock
+    if (((e.ctrlKey || e.metaKey) && e.key === '`') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a')) {
       e.preventDefault();
-      if (bottomPanel) {
-        bottomPanel.classList.toggle('collapsed');
-        if (!bottomPanel.classList.contains('collapsed')) {
+      if (agentPanel) {
+        agentPanel.classList.toggle('collapsed');
+        if (!agentPanel.classList.contains('collapsed')) {
           const promptInput = $('promptInput');
           if (promptInput) promptInput.focus();
         }
+      }
+    }
+
+    // Ctrl+J toggles Bottom Terminal Dock
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+      e.preventDefault();
+      if (bottomPanel) {
+        bottomPanel.classList.toggle('collapsed');
+        toggleBottomPanel.querySelector('svg').style.transform = bottomPanel.classList.contains('collapsed')
+          ? 'rotate(180deg)'
+          : '';
+        setTimeout(() => window.TerminalModule?.refit(), 250);
       }
     }
 

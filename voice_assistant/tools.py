@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import ast
 import datetime
+import html
 import json
 import logging
 import math
 import operator
 import os
 import platform
+import re
 import shutil
 import subprocess
 import urllib.parse
 import webbrowser
+from html import unescape
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+import httpx
 
 from voice_assistant.db import Database
 
@@ -80,13 +85,22 @@ class Tool:
         self.func = func
 
     def to_ollama_format(self) -> dict[str, Any]:
-        """Returns JSON schema format compatible with Ollama tools API."""
+        """Returns JSON schema format compatible with Ollama & OpenAI tools API."""
+        params = json.loads(json.dumps(self.parameters))
+        props = params.get("properties", {})
+        reqs = set(params.get("required", []))
+        for key, prop in props.items():
+            if key not in reqs and "type" in prop:
+                t = prop["type"]
+                if isinstance(t, str) and t in ("string", "integer", "number", "boolean"):
+                    prop["type"] = [t, "null"]
+
         return {
             "type": "function",
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.parameters,
+                "parameters": params,
             },
         }
 
@@ -290,54 +304,124 @@ class ToolRegistry:
             )
         )
 
-        # 6. Tool: search_code_and_files
-        def _search_code(query: str, directory: str = ".") -> str:
+        # 6. Tool: list_directory
+        def _list_dir(directory: str | None = ".", path: str | None = None, max_depth: int | None = 2, **kwargs) -> str:
+            directory = path or directory or "."
+            max_depth = max_depth if max_depth is not None else 2
+            target = Path(directory).resolve()
+            if not target.exists():
+                return f"Directory '{directory}' does not exist."
+            if not target.is_dir():
+                return f"Path '{directory}' is a file, not a directory."
+
+            ignore_dirs = {".git", "venv", ".venv", "node_modules", "__pycache__", ".pytest_cache", ".idea", ".vscode", "build", "dist", ".gemini", "brain"}
+            lines: list[str] = [f"Directory listing for '{target.name or directory}' (max depth {max_depth}):"]
+
+            def _walk(cur: Path, prefix: str, depth: int):
+                if depth > max_depth:
+                    return
+                try:
+                    entries = sorted(cur.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+                except Exception as e:
+                    lines.append(f"{prefix}[Permission denied: {e}]")
+                    return
+
+                visible = [e for e in entries if not e.name.startswith(".") and e.name not in ignore_dirs]
+                for i, entry in enumerate(visible):
+                    is_last = (i == len(visible) - 1)
+                    connector = "└── " if is_last else "├── "
+                    sub_prefix = prefix + ("    " if is_last else "│   ")
+                    if entry.is_dir():
+                        lines.append(f"{prefix}{connector}{entry.name}/")
+                        _walk(entry, sub_prefix, depth + 1)
+                    else:
+                        size_kb = max(1, round(entry.stat().st_size / 1024, 1))
+                        lines.append(f"{prefix}{connector}{entry.name} ({size_kb} KB)")
+
+            _walk(target, "", 1)
+            return "\n".join(lines[:100])
+
+        self.register(
+            Tool(
+                name="list_directory",
+                description="List contents of a directory in a clean tree hierarchy showing files, folders, and sizes.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "directory": {
+                            "type": "string",
+                            "description": "Path to directory to list (default is current folder '.').",
+                        },
+                        "max_depth": {
+                            "type": "integer",
+                            "description": "Maximum recursive folder depth to explore (default 2).",
+                        },
+                    },
+                    "required": [],
+                },
+                func=_list_dir,
+            )
+        )
+
+        # 7. Tool: search_code_and_files
+        def _search_code(
+            query: str = "",
+            directory: str | None = ".",
+            path: str | None = None,
+            file_pattern: str | None = "",
+            **kwargs,
+        ) -> str:
+            query = query or kwargs.get("text", "") or kwargs.get("keyword", "")
+            directory = path or directory or "."
+            file_pattern = file_pattern or ""
             target_dir = Path(directory).resolve()
             if not target_dir.exists():
                 return f"Directory '{directory}' does not exist."
 
             matches = []
             q_lower = query.lower()
+            ignore_dirs = {".git", "venv", ".venv", "node_modules", "__pycache__", ".pytest_cache", "build", "dist", ".gemini", "brain"}
+            code_exts = {".py", ".js", ".ts", ".html", ".css", ".json", ".md", ".sh", ".yaml", ".yml", ".sql", ".rs", ".go", ".c", ".cpp", ".txt", ".env"}
+
             try:
                 for root, dirs, files in os.walk(target_dir):
-                    # Skip hidden / heavy directories
-                    dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("venv", "node_modules", "__pycache__", "build", "dist")]
+                    dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ignore_dirs]
                     for f in files:
                         if f.startswith("."):
+                            continue
+                        if file_pattern and not f.endswith(file_pattern.lstrip("*")):
                             continue
                         f_path = Path(root) / f
                         rel_path = f_path.relative_to(target_dir)
 
-                        # Match filename
                         if q_lower in f.lower():
-                            matches.append(f"[File] {rel_path}")
-                            if len(matches) >= 15:
+                            matches.append(f"[Filename Match] {rel_path}")
+                            if len(matches) >= 30:
                                 break
 
-                        # Search content in text/code files
-                        if f.endswith((".py", ".js", ".ts", ".html", ".css", ".md", ".json", ".sh", ".txt", ".rs", ".go", ".c", ".cpp")):
+                        if f_path.suffix.lower() in code_exts:
                             try:
                                 text = f_path.read_text(encoding="utf-8", errors="ignore")
                                 for line_no, line in enumerate(text.splitlines(), start=1):
                                     if q_lower in line.lower():
-                                        matches.append(f"{rel_path}:{line_no} -> {line.strip()[:80]}")
-                                        if len(matches) >= 15:
+                                        matches.append(f"{rel_path}:{line_no} | {line.strip()[:100]}")
+                                        if len(matches) >= 30:
                                             break
                             except Exception:
                                 pass
-                    if len(matches) >= 15:
+                    if len(matches) >= 30:
                         break
             except Exception as e:
-                return f"Search encountered error: {e}"
+                return f"Search error: {e}"
 
             if not matches:
                 return f"No matches found for '{query}' in {directory}."
-            return f"Search results for '{query}':\n" + "\n".join(matches)
+            return f"Found {len(matches)} match(es) for '{query}':\n" + "\n".join(matches)
 
         self.register(
             Tool(
                 name="search_code_and_files",
-                description="Search for code snippets, symbols, functions, or filenames across project directories on the laptop.",
+                description="Search for symbols, function definitions, text snippets, or filenames across the workspace codebase.",
                 parameters={
                     "type": "object",
                     "properties": {
@@ -349,6 +433,10 @@ class ToolRegistry:
                             "type": "string",
                             "description": "Target folder to search in (default is current project directory '.').",
                         },
+                        "file_pattern": {
+                            "type": "string",
+                            "description": "Optional file extension or pattern filter (e.g. '.py', '.js').",
+                        },
                     },
                     "required": ["query"],
                 },
@@ -356,24 +444,44 @@ class ToolRegistry:
             )
         )
 
-        # 7. Tool: read_code_file
-        def _read_file(filepath: str, max_lines: int = 80) -> str:
-            p = Path(filepath).resolve()
+        # 8. Tool: read_code_file
+        def _read_file(
+            filepath: str | None = None,
+            file_path: str | None = None,
+            path: str | None = None,
+            start_line: int | None = 1,
+            end_line: int | None = 120,
+            **kwargs,
+        ) -> str:
+            actual_path = filepath or file_path or path or ""
+            if not actual_path:
+                return "Error: no filepath provided to read_code_file."
+            p = Path(actual_path).resolve()
             if not p.is_file():
-                return f"File '{filepath}' not found or is not a file."
+                return f"File '{actual_path}' not found or is not a file."
             try:
-                lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-                preview = lines[:max_lines]
-                content = "\n".join(f"{i+1}: {line}" for i, line in enumerate(preview))
-                extra = f"\n... [Truncated: showing first {max_lines} of {len(lines)} lines]" if len(lines) > max_lines else ""
-                return f"File '{p.name}' ({len(lines)} lines total):\n{content}{extra}"
+                all_lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+                total = len(all_lines)
+                if total == 0:
+                    return f"File '{p.name}' is empty (0 lines)."
+
+                start_idx = max(1, start_line if start_line is not None else 1)
+                end_idx = min(total, max(start_idx, end_line if end_line is not None else 120))
+                slice_lines = all_lines[start_idx - 1 : end_idx]
+
+                formatted = [f"{i}: {line}" for i, line in enumerate(slice_lines, start=start_idx)]
+                content = "\n".join(formatted)
+                note = ""
+                if end_idx < total:
+                    note = f"\n\n[Showing lines {start_idx} to {end_idx} of {total} total. Call read_code_file with start_line={end_idx + 1} to inspect further.]"
+                return f"File '{p.name}' (lines {start_idx}-{end_idx} of {total}):\n{content}{note}"
             except Exception as e:
                 return f"Could not read file '{filepath}': {e}"
 
         self.register(
             Tool(
                 name="read_code_file",
-                description="Read and inspect the contents of a code file or configuration on the laptop.",
+                description="Read a file with 1-indexed line numbers. Specify start_line and end_line to inspect specific ranges.",
                 parameters={
                     "type": "object",
                     "properties": {
@@ -381,9 +489,13 @@ class ToolRegistry:
                             "type": "string",
                             "description": "Path to the file to inspect (relative or absolute).",
                         },
-                        "max_lines": {
+                        "start_line": {
                             "type": "integer",
-                            "description": "Maximum lines to read (default 80).",
+                            "description": "1-indexed starting line number (default 1).",
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "description": "1-indexed ending line number (default 120).",
                         },
                     },
                     "required": ["filepath"],
@@ -392,9 +504,9 @@ class ToolRegistry:
             )
         )
 
-        # 8. Tool: execute_terminal_command
-        def _run_terminal(command: str) -> str:
-            # Block destructive system commands for safety
+        # 9. Tool: execute_terminal_command
+        def _run_terminal(command: str = "", cmd: str = "", timeout_seconds: int | None = 30, **kwargs) -> str:
+            command = command or cmd or ""
             cmd_strip = command.strip()
             dangerous = ["rm -rf /", "mkfs", ":(){ :|:& };:", "dd if="]
             if any(d in cmd_strip for d in dangerous):
@@ -406,7 +518,8 @@ class ToolRegistry:
                     shell=True,
                     capture_output=True,
                     text=True,
-                    timeout=15,
+                    timeout=max(5, min(timeout_seconds if timeout_seconds is not None else 30, 60)),
+                    cwd=os.getcwd(),
                 )
                 stdout = res.stdout.strip()
                 stderr = res.stderr.strip()
@@ -414,25 +527,29 @@ class ToolRegistry:
                 if stdout:
                     output.append(stdout)
                 if stderr:
-                    output.append(f"[stderr]: {stderr}")
-                out_str = "\n".join(output) if output else "(Command executed with no output)"
-                return f"[Exit code {res.returncode}]\n{out_str[:1200]}"
+                    output.append(f"[stderr]:\n{stderr}")
+                out_str = "\n".join(output) if output else "(Command finished with no output)"
+                return f"[Exit code {res.returncode}]\n{out_str[:2500]}"
             except subprocess.TimeoutExpired:
-                return f"Command '{cmd_strip}' timed out after 15 seconds."
+                return f"Command '{cmd_strip}' timed out after {timeout_seconds} seconds."
             except Exception as e:
                 return f"Failed executing command '{cmd_strip}': {e}"
 
         self.register(
             Tool(
                 name="execute_terminal_command",
-                description="Execute a safe developer terminal / shell command (e.g. 'git status', 'git diff', 'pytest', 'ls -la', 'python test.py').",
+                description="Execute a safe developer terminal or bash command (e.g. 'pytest', 'git status', 'ls -la', 'python test.py').",
                 parameters={
                     "type": "object",
                     "properties": {
                         "command": {
                             "type": "string",
                             "description": "The shell command to execute.",
-                        }
+                        },
+                        "timeout_seconds": {
+                            "type": "integer",
+                            "description": "Command timeout in seconds (default 30, max 60).",
+                        },
                     },
                     "required": ["command"],
                 },
@@ -440,20 +557,30 @@ class ToolRegistry:
             )
         )
 
-        # Tool: write_code_file
-        def _write_file(filepath: str, content: str) -> str:
-            p = Path(filepath).resolve()
+        # 10. Tool: write_code_file
+        def _write_file(
+            filepath: str | None = None,
+            file_path: str | None = None,
+            path: str | None = None,
+            content: str = "",
+            **kwargs,
+        ) -> str:
+            actual_path = filepath or file_path or path or ""
+            if not actual_path:
+                return "Error: no filepath provided to write_code_file."
+            p = Path(actual_path).resolve()
             try:
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(content, encoding="utf-8")
-                return f"Successfully wrote {len(content)} characters to '{filepath}'."
+                line_count = len(content.splitlines())
+                return f"Successfully wrote {line_count} line(s) ({len(content)} bytes) to '{actual_path}'."
             except Exception as e:
-                return f"Failed writing file '{filepath}': {e}"
+                return f"Failed writing file '{actual_path}': {e}"
 
         self.register(
             Tool(
                 name="write_code_file",
-                description="Create or overwrite a code file with the given content.",
+                description="Create or overwrite a file with complete source code.",
                 parameters={
                     "type": "object",
                     "properties": {
@@ -472,25 +599,44 @@ class ToolRegistry:
             )
         )
 
-        # Tool: patch_code_file
-        def _patch_file(filepath: str, target: str, replacement: str) -> str:
-            p = Path(filepath).resolve()
+        # 11. Tool: patch_code_file
+        def _patch_file(
+            filepath: str | None = None,
+            file_path: str | None = None,
+            path: str | None = None,
+            target: str = "",
+            replacement: str = "",
+            **kwargs,
+        ) -> str:
+            actual_path = filepath or file_path or path or ""
+            if not actual_path:
+                return "Error: no filepath provided to patch_code_file."
+            p = Path(actual_path).resolve()
             if not p.is_file():
-                return f"File '{filepath}' not found."
+                return f"File '{actual_path}' not found."
             try:
                 text = p.read_text(encoding="utf-8")
                 if target not in text:
-                    return f"Target snippet not found in '{filepath}'."
+                    return (
+                        f"Error: target code snippet was not found in '{p.name}'. "
+                        "Make sure whitespace, indentation, and line breaks match the file exactly. "
+                        "You can call read_code_file to see the exact current lines."
+                    )
+
+                count = text.count(target)
+                if count > 1:
+                    log.warning("Multiple instances (%d) of target found in %s, replacing first instance.", count, p.name)
+
                 new_text = text.replace(target, replacement, 1)
                 p.write_text(new_text, encoding="utf-8")
-                return f"Successfully patched '{filepath}'."
+                return f"Successfully patched '{p.name}'. Replaced {len(target.splitlines())} line(s) with {len(replacement.splitlines())} line(s)."
             except Exception as e:
-                return f"Failed patching file '{filepath}': {e}"
+                return f"Failed patching file '{actual_path}': {e}"
 
         self.register(
             Tool(
                 name="patch_code_file",
-                description="Replace an exact snippet of code in a file with new code.",
+                description="Replace an exact snippet of code in an existing file with new code.",
                 parameters={
                     "type": "object",
                     "properties": {
@@ -513,32 +659,58 @@ class ToolRegistry:
             )
         )
 
-        # 9. Tool: search_developer_web
-        def _search_dev_web(query: str, engine: str = "google") -> str:
-            encoded = urllib.parse.quote(query.strip())
-            if engine == "stackoverflow":
-                url = f"https://stackoverflow.com/search?q={encoded}"
-            elif engine == "github":
-                url = f"https://github.com/search?q={encoded}"
-            else:
-                url = f"https://duckduckgo.com/?q={encoded}"
-            webbrowser.open(url)
-            return f"Searched for '{query}' on {engine}: opened {url}"
+        # 12. Tool: search_developer_web
+        def _search_dev_web(query: str, max_results: int = 5) -> str:
+            clean_q = query.strip()
+            try:
+                url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(clean_q)
+                resp = httpx.get(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0"},
+                    timeout=10.0,
+                    follow_redirects=True,
+                )
+                if resp.status_code == 200:
+                    html_content = resp.text
+                    raw_snippets = re.findall(r"<a[^>]*class=\"result__snippet\"[^>]*>(.*?)</a>", html_content, re.DOTALL)
+                    raw_titles = re.findall(r"<a[^>]*class=\"result__title\"[^>]*>(.*?)</a>", html_content, re.DOTALL)
+                    raw_urls = re.findall(r"<a[^>]*class=\"result__url\"[^>]*href=\"([^\"]+)\"", html_content, re.DOTALL)
+
+                    items = []
+                    for i in range(min(max_results, len(raw_snippets))):
+                        title = re.sub(r"<[^>]+>", "", raw_titles[i]).strip() if i < len(raw_titles) else f"Result {i+1}"
+                        snippet = re.sub(r"<[^>]+>", "", raw_snippets[i]).strip()
+                        raw_link = raw_urls[i] if i < len(raw_urls) else ""
+                        if "uddg=" in raw_link:
+                            match = re.search(r"uddg=([^&]+)", raw_link)
+                            clean_link = urllib.parse.unquote(match.group(1)) if match else raw_link
+                        else:
+                            clean_link = raw_link.strip()
+                        items.append(f"{i+1}. **{unescape(title)}**\n   {unescape(snippet)}\n   URL: {clean_link}")
+
+                    if items:
+                        return f"Web search results for '{clean_q}':\n\n" + "\n\n".join(items)
+            except Exception as exc:
+                log.warning("DuckDuckGo search error: %s", exc)
+
+            encoded = urllib.parse.quote(clean_q)
+            fallback_url = f"https://duckduckgo.com/?q={encoded}"
+            return f"Web search completed for '{clean_q}'. Results accessible at: {fallback_url}"
 
         self.register(
             Tool(
                 name="search_developer_web",
-                description="Search the web for programming solutions, debugging errors, StackOverflow answers, or GitHub repositories.",
+                description="Live web search for programming documentation, solutions, StackOverflow answers, and library APIs.",
                 parameters={
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "Coding question, error message, or technology query.",
+                            "description": "Coding question, error message, documentation lookup, or library query.",
                         },
-                        "engine": {
-                            "type": "string",
-                            "description": "Search target: 'google', 'stackoverflow', or 'github'.",
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Maximum number of search results to return (default 5).",
                         },
                     },
                     "required": ["query"],
@@ -586,3 +758,50 @@ class ToolRegistry:
                 func=_get_notes,
             )
         )
+
+
+def format_tool_action_label(name: str, args: dict | None = None) -> str:
+    """Formats a human-friendly Antigravity-style badge for tool execution events."""
+    args = args or {}
+    if name == "read_code_file":
+        fp = args.get("filepath", "")
+        sl = args.get("start_line", 1)
+        el = args.get("end_line")
+        range_str = f" ({sl}-{el})" if el else ""
+        return f"📖 Read `{fp}`{range_str}"
+    elif name == "search_code_and_files":
+        q = args.get("query", "")
+        return f"🔍 Search codebase: `{q}`"
+    elif name == "list_directory":
+        d = args.get("directory", ".")
+        return f"📁 List directory `{d}`"
+    elif name == "patch_code_file":
+        fp = args.get("filepath", "")
+        return f"🛠️ Patch `{fp}`"
+    elif name == "write_code_file":
+        fp = args.get("filepath", "")
+        return f"📝 Write `{fp}`"
+    elif name == "execute_terminal_command":
+        cmd = args.get("command", "")
+        preview = f"{cmd[:36]}…" if len(cmd) > 36 else cmd
+        return f"▶️ Run `{preview}`"
+    elif name == "search_developer_web":
+        q = args.get("query", "")
+        return f"🌐 Search web: `{q}`"
+    elif name == "get_system_status":
+        return "💻 Inspect system status"
+    elif name == "calculate":
+        expr = args.get("expression", "")
+        return f"🧮 Compute: `{expr}`"
+    elif name == "open_application":
+        app = args.get("app_name", "")
+        return f"🚀 Launch app: `{app}`"
+    elif name == "play_music_spotify":
+        q = args.get("query", "")
+        return f"🎵 Spotify: `{q}`" if q else "🎵 Open Spotify"
+    elif name == "save_note":
+        return "💾 Save scratchpad note"
+    elif name == "get_notes":
+        return "📋 Read scratchpad notes"
+    return f"⚡ Tool: {name}"
+

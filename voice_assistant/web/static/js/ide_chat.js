@@ -8,6 +8,9 @@ const ChatModule = (() => {
   let _currentStreamBubble = null;
   let _currentStreamBuffer = '';
   let _isStreaming = false;
+  let _estimatedTokens = 0;
+  let _turnCount = 0;
+  let _voiceEnabled = localStorage.getItem('hola_voice_enabled') !== 'false';
 
   const $ = (id) => document.getElementById(id);
 
@@ -61,8 +64,11 @@ const ChatModule = (() => {
       });
     }
 
-    // Chips
+    // Chips & ECC actions
     _bindChips();
+    _bindEccPills();
+    _updateBudgetPill();
+    _initVoiceToggle();
   }
 
   function _bindChips() {
@@ -77,6 +83,126 @@ const ChatModule = (() => {
         }
       });
     });
+  }
+
+  function _bindEccPills() {
+    document.querySelectorAll('.ecc-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        const prefix = pill.dataset.prefix || '';
+        const input = $('promptInput');
+        if (input) {
+          if (!input.value.startsWith(prefix.trim())) {
+            input.value = prefix + input.value.replace(/^\/(plan|fix|test|review|search)\s*/, '');
+          }
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      });
+    });
+  }
+
+  function _updateBudgetPill() {
+    const textEl = $('chatContextBudgetText');
+    if (!textEl) return;
+    if (_turnCount === 0) {
+      textEl.textContent = 'Ready';
+    } else {
+      const kTokens = (_estimatedTokens / 1000).toFixed(1);
+      textEl.textContent = `~${kTokens}k tok | ${_turnCount} turns`;
+    }
+  }
+
+  function _setVoiceEnabled(enabled, syncBackend = true) {
+    _voiceEnabled = Boolean(enabled);
+    localStorage.setItem('hola_voice_enabled', _voiceEnabled ? 'true' : 'false');
+
+    const speakToggle = $('speakReplyToggle');
+    if (speakToggle) {
+      speakToggle.checked = _voiceEnabled;
+    }
+
+    const muteBtn = $('agentVoiceMuteBtn');
+    const iconActive = $('voiceIconActive');
+    const iconMuted = $('voiceIconMuted');
+    if (muteBtn) {
+      muteBtn.classList.toggle('muted', !_voiceEnabled);
+      muteBtn.title = _voiceEnabled ? 'Agent Voice: ON (Click to Mute)' : 'Agent Voice: MUTED (Click to Enable Voice)';
+    }
+    if (iconActive) iconActive.hidden = !_voiceEnabled;
+    if (iconMuted) iconMuted.hidden = _voiceEnabled;
+
+    const switchLabel = $('speakSwitchLabel');
+    if (switchLabel) {
+      switchLabel.textContent = _voiceEnabled ? 'Voice' : 'Muted';
+    }
+
+    if (syncBackend && window.API?.toggleVoiceMute) {
+      API.toggleVoiceMute(_voiceEnabled).catch((err) => {
+        console.warn('Voice mute sync error:', err);
+      });
+    }
+
+    if (window.UIModule?.showToast) {
+      UIModule.showToast(_voiceEnabled ? 'Agent voice enabled 🔊' : 'Agent voice muted — Text chat only 🔇');
+    }
+  }
+
+  function _initVoiceToggle() {
+    const muteBtn = $('agentVoiceMuteBtn');
+    const speakToggle = $('speakReplyToggle');
+
+    const saved = localStorage.getItem('hola_voice_enabled');
+    _voiceEnabled = saved !== 'false';
+
+    if (speakToggle) {
+      speakToggle.checked = _voiceEnabled;
+      speakToggle.addEventListener('change', () => {
+        _setVoiceEnabled(speakToggle.checked);
+      });
+    }
+
+    const iconActive = $('voiceIconActive');
+    const iconMuted = $('voiceIconMuted');
+    const switchLabel = $('speakSwitchLabel');
+    if (muteBtn) {
+      muteBtn.classList.toggle('muted', !_voiceEnabled);
+      muteBtn.title = _voiceEnabled ? 'Agent Voice: ON (Click to Mute)' : 'Agent Voice: MUTED (Click to Enable Voice)';
+      muteBtn.addEventListener('click', () => {
+        _setVoiceEnabled(!_voiceEnabled);
+      });
+    }
+    if (iconActive) iconActive.hidden = !_voiceEnabled;
+    if (iconMuted) iconMuted.hidden = _voiceEnabled;
+    if (switchLabel) switchLabel.textContent = _voiceEnabled ? 'Voice' : 'Muted';
+
+    if (window.API?.toggleVoiceMute) {
+      API.toggleVoiceMute(_voiceEnabled).catch(() => {});
+    }
+  }
+
+  function _expandEccCommand(rawText) {
+    const trimmed = rawText.trim();
+    if (trimmed.startsWith('/plan')) {
+      const task = trimmed.replace(/^\/plan\s*/, '') || 'the current objective';
+      return `[ECC Plan Mode]\nDeconstruct this engineering task into an architectural plan before modifying code. Explore the codebase first, assess dependencies and risks, then outline step-by-step implementation and verification phases.\n\nObjective: ${task}`;
+    }
+    if (trimmed.startsWith('/test')) {
+      const feat = trimmed.replace(/^\/test\s*/, '') || 'the target module';
+      return `[ECC TDD Mode]\nApply Test-Driven Development (TDD). First inspect the existing test setup, design targeted unit tests with mocks/fixtures, run them via execute_terminal_command to confirm failure, then write minimal code to pass.\n\nTarget: ${feat}`;
+    }
+    if (trimmed.startsWith('/fix')) {
+      const err = trimmed.replace(/^\/fix\s*/, '') || 'the current issue';
+      return `[ECC Fix Mode]\nDiagnose and fix this error using root-cause isolation. Search for the error location, inspect the stack trace, formulate a hypothesis, apply a surgical patch (do not mask errors), and verify using tests/linters.\n\nError/Issue: ${err}`;
+    }
+    if (trimmed.startsWith('/review')) {
+      const target = trimmed.replace(/^\/review\s*/, '') || (_activeFileContext?.name ? `active file ${_activeFileContext.name}` : 'the current code');
+      return `[ECC Review Mode]\nConduct an exhaustive, fresh-context code review on ${target}. Check for:\n1. Edge cases & null safety\n2. Security vulnerabilities & injection points\n3. Performance bottlenecks & memory leaks\n4. Type safety & architectural consistency`;
+    }
+    if (trimmed.startsWith('/search')) {
+      const query = trimmed.replace(/^\/search\s*/, '');
+      return `[ECC Search Mode]\nConduct deep multi-source research. Search codebase symbols with search_code_and_files and search web documentation with search_developer_web to find official patterns.\n\nQuery: ${query}`;
+    }
+    return rawText;
   }
 
   function _updateContextPill() {
@@ -174,6 +300,19 @@ const ChatModule = (() => {
         });
         bar.appendChild(runBtn);
       } else if (_activeFileContext && _activeFileContext.path) {
+        // Review Diff button
+        const diffBtn = document.createElement('button');
+        diffBtn.className = 'btn-action-reject';
+        diffBtn.innerHTML = '⚖️ Diff';
+        diffBtn.title = 'Review side-by-side diff against current file';
+        diffBtn.addEventListener('click', () => {
+          if (window.EditorModule) {
+            const currentContent = EditorModule.getCurrentContent();
+            EditorModule.showDiff(currentContent, codeText, _activeFileContext.name);
+          }
+        });
+        bar.appendChild(diffBtn);
+
         const applyBtn = document.createElement('button');
         applyBtn.className = 'btn-action-apply';
         applyBtn.innerHTML = `✨ Apply to ${_activeFileContext.name || 'Editor'}`;
@@ -260,13 +399,32 @@ const ChatModule = (() => {
     }
   }
 
+  let _activeToolCard = null;
+
   function finishAssistantStream(fullText) {
+    if (_activeToolCard) {
+      const badge = _activeToolCard.querySelector('.agent-tool-badge');
+      const ind = _activeToolCard.querySelector('.agent-tool-indicator');
+      if (badge) {
+        badge.textContent = 'Done';
+        badge.classList.add('done');
+      }
+      if (ind) ind.classList.add('done');
+      _activeToolCard = null;
+    }
+
     const finalContent = fullText || _currentStreamBuffer;
     if (_currentStreamBubble) {
       _currentStreamBubble.classList.remove('streaming-cursor');
       _currentStreamBubble.innerHTML = _formatMarkdown(finalContent);
       _bindActionButtons(_currentStreamBubble);
       _currentStreamBubble = null;
+    } else if (finalContent) {
+      appendMessage('assistant', finalContent);
+    }
+    if (finalContent) {
+      _estimatedTokens += Math.ceil(finalContent.length / 4);
+      _updateBudgetPill();
     }
     _currentStreamBuffer = '';
     _isStreaming = false;
@@ -278,37 +436,49 @@ const ChatModule = (() => {
     const feed = $('chatHistory');
     if (!feed) return;
 
-    const pill = document.createElement('div');
-    pill.style.cssText = `
-      align-self: center;
-      padding: 3px 12px;
-      font-size: 11px;
-      font-family: var(--font-mono);
-      color: var(--accent-2);
-      background: var(--accent-2-dim);
-      border: 1px solid rgba(34,211,238,0.3);
-      border-radius: 99px;
-      margin: 4px 0;
-      animation: msg-in 0.2s ease;
+    if (_activeToolCard) {
+      const badge = _activeToolCard.querySelector('.agent-tool-badge');
+      const ind = _activeToolCard.querySelector('.agent-tool-indicator');
+      if (badge) {
+        badge.textContent = 'Done';
+        badge.classList.add('done');
+      }
+      if (ind) ind.classList.add('done');
+    }
+
+    const card = document.createElement('div');
+    card.className = 'agent-tool-card';
+    card.innerHTML = `
+      <div class="agent-tool-header">
+        <div class="agent-tool-left">
+          <div class="agent-tool-indicator"></div>
+          <div class="agent-tool-title">${_formatMarkdown(toolText || 'Executing action…')}</div>
+        </div>
+        <span class="agent-tool-badge">Running…</span>
+      </div>
     `;
-    pill.innerHTML = `⚡ <span>${_escapeHtml(toolText)}</span>`;
-    feed.appendChild(pill);
+
+    _activeToolCard = card;
+    feed.appendChild(card);
     _scrollToBottom();
   }
 
   function clearChat() {
+    _estimatedTokens = 0;
+    _turnCount = 0;
+    _updateBudgetPill();
     const feed = $('chatHistory');
     if (!feed) return;
     feed.innerHTML = `
       <div class="ide-chat-empty">
         <div class="ide-chat-empty-icon">⌘</div>
-        <p>Ask Hola to explain code, generate diffs, fix bugs, or run terminal commands.</p>
+        <p>Autonomous AI pair programmer powered by the ECC engineering harness. Plan architectures, write TDD tests, isolate bugs, and verify with terminal commands.</p>
         <div class="ide-chat-chips">
-          <button class="chat-chip" data-query="Explain this file">📄 Explain file</button>
-          <button class="chat-chip" data-query="Find bugs in this code">🐛 Find bugs</button>
-          <button class="chat-chip" data-query="Write unit tests for this">🧪 Write tests</button>
-          <button class="chat-chip" data-query="Refactor for readability">✨ Refactor</button>
-          <button class="chat-chip" data-query="Run git status">💾 Git status</button>
+          <button class="chat-chip" data-query="/plan Refactor current module with risk assessment">⚡ /plan</button>
+          <button class="chat-chip" data-query="/fix Diagnose and fix error in active file">🐛 /fix</button>
+          <button class="chat-chip" data-query="/test Write and run pytest suite">🧪 /test</button>
+          <button class="chat-chip" data-query="/review Check security, edge cases, and performance">🛡️ /review</button>
+          <button class="chat-chip" data-query="/search Find symbol definitions and usages">🔍 /search</button>
         </div>
       </div>
     `;
@@ -327,28 +497,98 @@ const ChatModule = (() => {
     input.value = '';
     input.style.height = 'auto';
 
-    let promptToSend = rawText;
+    // ECC /compact or /clear shortcut
+    if (rawText === '/compact' || rawText === '/clear') {
+      try {
+        await API.clear();
+        clearChat();
+        if (window.UIModule?.showToast) {
+          UIModule.showToast('Context budget compacted & cleared');
+        }
+      } catch (err) {
+        console.error('Clear chat error:', err);
+      }
+      return;
+    }
 
-    // Prepend context if active file is open and user prompt references file or chips
-    if (_activeFileContext && _activeFileContext.path) {
+    const expandedText = _expandEccCommand(rawText);
+    let promptToSend = expandedText;
+
+    // Prepend context if active file is open and user prompt does not already embed file
+    if (_activeFileContext && _activeFileContext.path && !expandedText.includes('[Active file:')) {
       const codeSnippet = (_activeFileContext.content || '').slice(0, 1500);
       promptToSend = `[Active file: ${_activeFileContext.path} (${_activeFileContext.language})]\n` +
         `\`\`\`${_activeFileContext.language}\n${codeSnippet}\n\`\`\`\n\n` +
-        rawText;
+        expandedText;
     }
+
+    _estimatedTokens += Math.ceil(promptToSend.length / 4);
+    _turnCount += 1;
+    _updateBudgetPill();
 
     appendMessage('user', rawText);
     startAssistantStream();
 
-    const speak = Boolean(speakToggle && speakToggle.checked);
+    const speak = _voiceEnabled;
 
     try {
       if (window.UIModule?.updateAgentState) {
         UIModule.updateAgentState('thinking', 'Thinking…', true);
       }
       const res = await API.chat(promptToSend, speak);
-      if (res && res.text) {
-        finishAssistantStream(res.text);
+      const answer = res?.reply || res?.text || '';
+      if (answer) {
+        finishAssistantStream(answer);
+      } else if (res && res.error) {
+        finishAssistantStream(`⚠️ Error: ${res.error}`);
+      } else {
+        finishAssistantStream(_currentStreamBuffer || 'No response received.');
+      }
+    } catch (err) {
+      console.error('Chat error:', err);
+      finishAssistantStream(`⚠️ Error: ${err.message}`);
+    } finally {
+      if (window.UIModule?.updateAgentState) {
+        UIModule.updateAgentState('idle', 'Ready', false);
+      }
+    }
+  }
+
+  async function sendPrompt(text) {
+    if (!text || !text.trim()) return;
+
+    if (text === '/compact' || text === '/clear') {
+      try {
+        await API.clear();
+        clearChat();
+      } catch (err) {
+        console.error('Clear error:', err);
+      }
+      return;
+    }
+
+    const expanded = _expandEccCommand(text);
+    _estimatedTokens += Math.ceil(expanded.length / 4);
+    _turnCount += 1;
+    _updateBudgetPill();
+
+    appendMessage('user', text);
+    startAssistantStream();
+
+    const speak = _voiceEnabled;
+
+    try {
+      if (window.UIModule?.updateAgentState) {
+        UIModule.updateAgentState('thinking', 'Thinking…', true);
+      }
+      const res = await API.chat(expanded, speak);
+      const answer = res?.reply || res?.text || '';
+      if (answer) {
+        finishAssistantStream(answer);
+      } else if (res && res.error) {
+        finishAssistantStream(`⚠️ Error: ${res.error}`);
+      } else {
+        finishAssistantStream(_currentStreamBuffer || 'No response received.');
       }
     } catch (err) {
       console.error('Chat error:', err);
@@ -369,7 +609,11 @@ const ChatModule = (() => {
     showToolExecution,
     clearChat,
     submitMessage,
+    sendPrompt,
+    setVoiceEnabled: _setVoiceEnabled,
+    isVoiceEnabled: () => _voiceEnabled,
   };
 })();
 
 window.ChatModule = ChatModule;
+window.IdeChatModule = ChatModule;

@@ -9,6 +9,7 @@ from voice_assistant.config import Settings
 from voice_assistant.exceptions import AssistantError
 from voice_assistant.llm import BaseChat
 from voice_assistant.stt import WhisperTranscriber, match_wake_word
+from voice_assistant.tools import format_tool_action_label
 from voice_assistant.tts import PyttsxSpeaker
 
 log = logging.getLogger(__name__)
@@ -75,34 +76,43 @@ class VoicePipeline:
             if level > 0.005:
                 self.emit("audio_level", str(round(level, 4)))
 
-        audio = record_audio(self.settings, on_level=_on_level)
-        if self._stop.is_set():
+        audio = record_audio(self.settings, on_level=_on_level, stop_event=self._stop)
+        if audio is None or len(audio) < int(self.settings.sample_rate * 0.25):
             return
 
         self.emit("transcribing", "Transcribing…")
         raw_text = self._transcriber.transcribe(audio, self.settings.sample_rate)
-        if not raw_text:
+        if not raw_text or not raw_text.strip():
             self.emit("idle", "No speech heard")
             return
 
-        # Wake-word verification if configured
-        is_match, user_text = match_wake_word(raw_text, self.settings.wake_word)
-        if not is_match:
-            self.emit("idle", f"Listening for '{self.settings.wake_word}'…")
-            return
-
-        if not user_text.strip():
+        # Wake-word verification: if wake word matches, strip it. If not, treat raw_text as speech!
+        is_match, remainder = match_wake_word(raw_text, self.settings.wake_word)
+        if is_match and remainder.strip():
+            user_text = remainder.strip()
+        elif is_match and not remainder.strip():
             self.emit("assistant", "Yes, I am listening.")
-            self._speaker.speak("Yes? How can I help?")
+            if self.settings.enable_tts:
+                try:
+                    self._speaker.speak("Yes? How can I help?")
+                except Exception as exc:
+                    log.warning("TTS error: %s", exc)
             self.emit("idle", "Ready")
             return
+        else:
+            # Wake word was not mentioned, but the user activated voice and spoke!
+            user_text = raw_text.strip()
 
         log.info("User: %s", user_text)
         self.emit("user", user_text)
 
         if user_text.lower().strip().rstrip(".!") in self.settings.exit_phrases:
-            self._speaker.speak("Goodbye!")
             self.emit("assistant", "Goodbye!")
+            if self.settings.enable_tts:
+                try:
+                    self._speaker.speak("Goodbye!")
+                except Exception:
+                    pass
             self._stop.set()
             return
 
@@ -116,7 +126,8 @@ class VoicePipeline:
                 self.emit("token", token)
 
             def on_tool_start(tool_name: str, tool_args: dict) -> None:
-                self.emit("tool_start", f"Running tool: {tool_name}")
+                label = format_tool_action_label(tool_name, tool_args)
+                self.emit("tool_start", label)
 
             sentence_generator = self._chat.stream_reply(
                 user_text,
@@ -125,13 +136,24 @@ class VoicePipeline:
             )
 
             def on_sentence(sentence: str) -> None:
-                self.emit("speaking", sentence)
+                if self.settings.enable_tts:
+                    self.emit("speaking", sentence)
 
-            self._speaker.speak_stream(
-                sentence_generator,
-                stop_event=self._stop,
-                on_sentence_start=on_sentence,
-            )
+            if self.settings.enable_tts:
+                try:
+                    self._speaker.speak_stream(
+                        sentence_generator,
+                        stop_event=self._stop,
+                        on_sentence_start=on_sentence,
+                    )
+                except Exception as exc:
+                    log.warning("TTS stream error: %s", exc)
+                    for chunk in sentence_generator:
+                        pass
+            else:
+                # Agent voice is muted: consume stream for chat tokens without playing audio
+                for chunk in sentence_generator:
+                    pass
 
             final_reply = "".join(full_tokens).strip()
             log.info("Assistant: %s", final_reply)
@@ -140,7 +162,11 @@ class VoicePipeline:
             reply = self._chat.reply(user_text)
             log.info("Assistant: %s", reply)
             self.emit("assistant", reply)
-            self.emit("speaking", "Speaking…")
-            self._speaker.speak(reply)
+            if self.settings.enable_tts:
+                self.emit("speaking", "Speaking…")
+                try:
+                    self._speaker.speak(reply)
+                except Exception as exc:
+                    log.warning("TTS error: %s", exc)
 
         self.emit("idle", "Ready")

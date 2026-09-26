@@ -1,5 +1,5 @@
-from __future__ import annotations
-
+import threading
+import time
 from typing import Callable, Optional
 
 import numpy as np
@@ -63,13 +63,15 @@ def _select_device(settings: Settings) -> Optional[int]:
 
 
 def record_audio(
-    settings: Settings, on_level: Optional[Callable[[float], None]] = None
+    settings: Settings,
+    on_level: Optional[Callable[[float], None]] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> np.ndarray:
     sd = _sounddevice()
     device = _select_device(settings)
     try:
         if settings.use_vad:
-            return _record_until_silence(sd, settings, device, on_level=on_level)
+            return _record_until_silence(sd, settings, device, on_level=on_level, stop_event=stop_event)
         frames = int(settings.record_seconds * settings.sample_rate)
         audio = sd.rec(
             frames,
@@ -78,6 +80,11 @@ def record_audio(
             dtype="int16",
             device=device,
         )
+        while sd.get_status():
+            if stop_event and stop_event.is_set():
+                sd.stop()
+                break
+            time.sleep(0.02)
         sd.wait()
         return audio
     except AudioDeviceError:
@@ -93,6 +100,7 @@ def _record_until_silence(
     settings: Settings,
     device: Optional[int],
     on_level: Optional[Callable[[float], None]] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> np.ndarray:
     chunk_seconds = 0.03
     chunk_size = max(int(settings.sample_rate * chunk_seconds), 1)
@@ -114,6 +122,8 @@ def _record_until_silence(
         blocksize=chunk_size,
     ) as stream:
         for _ in range(max_chunks):
+            if stop_event and stop_event.is_set():
+                break
             data, overflowed = stream.read(chunk_size)
             chunks.append(data.copy())
             rms = float(np.sqrt(np.mean((data.astype(np.float32) / 32768.0) ** 2)))
